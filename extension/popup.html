@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>网页素材</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="topbar">
+        <div class="drag-zone" id="dragHandle" title="拖动面板">
+          <strong>网页素材</strong>
+          <span id="pageTitle">扫描当前页面</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="collapseButton" class="icon-button collapse-button" title="收起为悬浮按钮" aria-label="收起为悬浮按钮">
+            <svg class="triangle-line collapse-triangle" aria-hidden="true" viewBox="0 0 16 16">
+              <path d="M4.25 9.75 8 6.25l3.75 3.5" />
+            </svg>
+          </button>
+          <button id="scanButton" class="icon-button" title="重新扫描">扫描</button>
+          <button id="closeButton" class="icon-button close-button" title="关闭面板">×</button>
+        </div>
+      </header>
+
+      <section class="summary">
+        <span id="summaryText">准备扫描</span>
+        <label class="select-all">
+          <input id="selectAll" type="checkbox" />
+          全选
+        </label>
+      </section>
+
+      <section class="action-bar">
+        <button id="sendButton" class="primary-button" disabled>发送到素材库</button>
+        <button id="copyButton" disabled>复制链接</button>
+      </section>
+
+      <section class="library-bar">
+        <label class="folder-field">
+          <span>收集到</span>
+          <select id="folderSelect">
+            <option value="default">默认收藏</option>
+          </select>
+        </label>
+        <p>仅用于个人学习与参考。请尊重原作者版权，商业使用前请确认授权。</p>
+      </section>
+
+      <section id="notice" class="notice" hidden></section>
+      <section id="assetList" class="asset-list"></section>
+
+      <footer class="footer"></footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

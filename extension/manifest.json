@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "素材库网页收集助手",
+  "version": "0.1.0",
+  "description": "扫描当前网页中的图片、动图和视频素材，支持单选、多选和全选收集。",
+  "action": {
+    "default_title": "扫描网页素材"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "clipboardWrite",
+    "tabs",
+    "webRequest",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1:17321/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "popup.html",
+        "popup.css",
+        "popup.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
