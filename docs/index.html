@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cyrus Ai素材管理</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1217;
+        --panel: #161a22;
+        --text: #e6ebf2;
+        --muted: #9aa4b2;
+        --line: #2a313c;
+        --accent: #7fd26b;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #eef2f6;
+          --panel: #ffffff;
+          --text: #1d2733;
+          --muted: #5f6b77;
+          --line: #d8e0e8;
+          --accent: #3f8f3d;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      }
+      main {
+        width: min(860px, calc(100vw - 40px));
+        margin: 8vh auto 0;
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+      }
+      h1 { margin: 0 0 10px; font-size: 30px; }
+      p { margin: 0 0 12px; color: var(--muted); line-height: 1.7; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .card {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--panel) 88%, var(--accent));
+      }
+      .card strong { display: block; margin-bottom: 8px; font-size: 14px; }
+      .card a {
+        color: var(--accent);
+        text-decoration: none;
+        word-break: break-all;
+      }
+      .hint { margin-top: 16px; font-size: 12px; }
+      code { padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--line) 55%, transparent); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cyrus Ai素材管理</h1>
+      <p>这是这个项目的 GitHub Pages 站点，主要用来放广告配置和软件更新配置。</p>
+      <div class="grid">
+        <div class="card">
+          <strong>广告配置</strong>
+          <a href="./ads.json">ads.json</a>
+          <p>在这里填写广告图片和跳转链接。</p>
+        </div>
+        <div class="card">
+          <strong>更新配置</strong>
+          <a href="./update.json">update.json</a>
+          <p>在这里填写新版本号、安装包地址和校验值。</p>
+        </div>
+        <div class="card">
+          <strong>素材说明</strong>
+          <p>广告图可以放在 <code>docs/ads/</code>，安装包可以放在 <code>docs/download/</code>。</p>
+        </div>
+      </div>
+      <p class="hint">后续软件里只要填这个 Pages 地址下面的 <code>ads.json</code> 和 <code>update.json</code> 即可。</p>
+    </main>
+  </body>
+</html>
