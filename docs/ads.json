@@ -1,5 +1,12 @@
 {
   "version": 1,
-  "updatedAt": "",
-  "ads": []
+  "updatedAt": "2026-08-22T17:01:03.976Z",
+  "ads": [
+    {
+      "title": "风眼ai视觉设计",
+      "imageUrl": "ads/1787417996835_456646465.jpg",
+      "linkUrl": "https://app-bc7556c629a74e7f9d20b08ff0f30945.apps.vibex.cn/?inviteCode=rh-v1316",
+      "enabled": true
+    }
+  ]
 }
