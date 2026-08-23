@@ -1,14 +1,13 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "title": "发现新版本",
   "notes": [
-    "修复安装版启动黑屏问题",
-    "新增首次启动素材库选择/创建流程",
-    "设置页改为左侧分类布局",
-    "AI 服务类型默认 RunningHub"
+    "修复获取模型后设置页跳回素材库的问题",
+    "点击模型后会自动选用并收起模型列表",
+    "优化 AI 接口设置页的模型选择体验"
   ],
-  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.1/Cyrus-Ai-Asset-Manager-User-v1.0.1.exe",
-  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.1.exe",
-  "sha256": "6FE640325A3798B5505784BD8E0F10875159E5F74C4AF752324B6F5A12F8FA9E",
+  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.2/Cyrus-Ai-Asset-Manager-User-v1.0.2.exe",
+  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.2.exe",
+  "sha256": "5273F96F3C0D3EB68EFA0C28DD447FDD25A0662E8EA54E699DC58BECA199E195",
   "force": false
 }
