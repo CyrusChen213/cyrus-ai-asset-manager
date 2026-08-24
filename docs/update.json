@@ -1,19 +1,18 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "title": "发现新版本",
   "notes": [
-    "更新提示改为右下角小型状态条",
-    "缩小下载提示尺寸并优化进度条细节",
-    "减少更新提示对素材浏览区域的遮挡"
+    "隐藏用户版中管理员相关的 API 保存说明",
+    "用户版设置页文案更干净"
   ],
-  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.4/Cyrus-Ai-Asset-Manager-User-v1.0.4.exe",
-  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.4.exe",
-  "sha256": "3AA9BEF4155C2FDC3A55974CC9E2CEACDB1559B3A980635727E13D75ABD849B9",
+  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.5/Cyrus-Ai-Asset-Manager-User-v1.0.5.exe",
+  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.5.exe",
+  "sha256": "8648FB54121012FB6B1E70D90391C4E7B71AF5E9FD33CC0EB2152AE22C18BB82",
   "force": false,
-  "size": 117585671,
+  "size": 117585805,
   "signature": {
     "keyId": "cyrus-config-v1",
     "algorithm": "ECDSA-P256-SHA256",
-    "value": "dTmnJdjI1Q4cmK0LAb9ikdzp7ZL4HShMK-5UdH86_eq0h5UNMqIid_bz8Z02zLr8JRvZBQdEva_dnFArJ2ULYA"
+    "value": "wVgvFqyEy3yid1AHvxeY9R8TCKPnKYdrLfcbfam0-0WeiipxbVXK7o8y2CUBVH5COf-8Pgm2uII_LfTEjbWJOA"
   }
 }
