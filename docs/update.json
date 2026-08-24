@@ -1,19 +1,19 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "title": "发现新版本",
   "notes": [
-    "新增广告和更新配置签名校验",
-    "管理版可导出带签名的 ads.json 和 update.json",
-    "用户版只接受由管理版生成的有效配置"
+    "更新提示改为右下角小型状态条",
+    "缩小下载提示尺寸并优化进度条细节",
+    "减少更新提示对素材浏览区域的遮挡"
   ],
-  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.3/Cyrus-Ai-Asset-Manager-User-v1.0.3.exe",
-  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.3.exe",
-  "sha256": "97971B0934D238B686C3D2A0507047725EBB69ECFAF6BC1C225E6E12A45B8376",
+  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.4/Cyrus-Ai-Asset-Manager-User-v1.0.4.exe",
+  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.4.exe",
+  "sha256": "3AA9BEF4155C2FDC3A55974CC9E2CEACDB1559B3A980635727E13D75ABD849B9",
   "force": false,
-  "size": 117585871,
+  "size": 117585671,
   "signature": {
     "keyId": "cyrus-config-v1",
     "algorithm": "ECDSA-P256-SHA256",
-    "value": "_Uvj3matCaCqp0kk1SysSJW7jDJWaJMxhtYE48ProqT-rC8Dzmy3hdLcyePmBiHCFqCRc1mx_2igzySnnl3yXg"
+    "value": "dTmnJdjI1Q4cmK0LAb9ikdzp7ZL4HShMK-5UdH86_eq0h5UNMqIid_bz8Z02zLr8JRvZBQdEva_dnFArJ2ULYA"
   }
 }
