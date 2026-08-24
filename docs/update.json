@@ -1,13 +1,19 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "title": "发现新版本",
   "notes": [
-    "修复获取模型后设置页跳回素材库的问题",
-    "点击模型后会自动选用并收起模型列表",
-    "优化 AI 接口设置页的模型选择体验"
+    "新增广告和更新配置签名校验",
+    "管理版可导出带签名的 ads.json 和 update.json",
+    "用户版只接受由管理版生成的有效配置"
   ],
-  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.2/Cyrus-Ai-Asset-Manager-User-v1.0.2.exe",
-  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.2.exe",
-  "sha256": "5273F96F3C0D3EB68EFA0C28DD447FDD25A0662E8EA54E699DC58BECA199E195",
-  "force": false
+  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.3/Cyrus-Ai-Asset-Manager-User-v1.0.3.exe",
+  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.3.exe",
+  "sha256": "97971B0934D238B686C3D2A0507047725EBB69ECFAF6BC1C225E6E12A45B8376",
+  "force": false,
+  "size": 117585871,
+  "signature": {
+    "keyId": "cyrus-config-v1",
+    "algorithm": "ECDSA-P256-SHA256",
+    "value": "_Uvj3matCaCqp0kk1SysSJW7jDJWaJMxhtYE48ProqT-rC8Dzmy3hdLcyePmBiHCFqCRc1mx_2igzySnnl3yXg"
+  }
 }
