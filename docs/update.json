@@ -1,19 +1,19 @@
 {
-  "version": "1.0.6",
+  "version": "1.0.7",
   "title": "发现新版本",
   "notes": [
-    "优化素材区顶部和右侧栏布局",
-    "列宽控制移到右侧栏底部",
-    "广告位支持 21:9 显示比例"
+    "设置里新增主动检测新版本",
+    "优化设置页滚动和底部按钮显示",
+    "修复旧素材库默认更新地址读取"
   ],
-  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.6/Cyrus-Ai-Asset-Manager-User-v1.0.6.exe",
-  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.6.exe",
-  "sha256": "4E519A861189144DD4F11AEF005236A0EAB9EA175EBAB113CF9461D979CE82B8",
+  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.7/Cyrus-Ai-Asset-Manager-User-v1.0.7.exe",
+  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.7.exe",
+  "sha256": "3174FDC598046A3443CE7F9BC48B3D16FAD561BDDA3282455CF2B36A2C753DE8",
   "force": false,
-  "size": 117585972,
+  "size": 117586377,
   "signature": {
     "keyId": "cyrus-config-v1",
     "algorithm": "ECDSA-P256-SHA256",
-    "value": "jAWFdH3fe_ActMGon4T_gehyf7FFNYosemgvKK9QKW-gv8T6EowTJcWvNv4eDX9717-nRgo79fpB0iDjSJbQng"
+    "value": "TR0QP_nLryqyEk6yXOQflwk5BVAoNE6SQZrJRprAJOeTrcDCh5AeXc3WBxJ-MkQb6BUbH93bFg2XwRzYPkTJjg"
   }
 }
