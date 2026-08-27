@@ -20,6 +20,7 @@ import {
   Moon,
   PanelRight,
   Pencil,
+  Puzzle,
   RefreshCw,
   RotateCcw,
   RotateCw,
@@ -30,11 +31,16 @@ import {
   Sun,
   Tags,
   Trash2,
+  Users,
   Video,
   WandSparkles,
   X,
 } from 'lucide-react';
 import './styles.css';
+import { DEFAULT_REMOTE_ADS_URL, DEFAULT_UPDATE_CONFIG_URL } from './appConfig';
+import { CONFIG_PRIVATE_KEY_BASE64, hasConfigSigningKey, verifySignedConfig } from './configSignature';
+
+const IS_ADMIN_BUILD = import.meta.env.VITE_APP_VARIANT !== 'user';
 
 const COLOR_BUCKETS = [
   { name: '红', hex: '#ef4444', hue: [345, 15] },
@@ -55,7 +61,7 @@ const DETAIL_LEVELS = ['简洁', '中等', '详细', '超详细'];
 
 const THUMBNAIL_MIN = 148;
 const THUMBNAIL_MAX = 320;
-const THUMBNAIL_DEFAULT = 204;
+const THUMBNAIL_DEFAULT = THUMBNAIL_MIN;
 const THUMBNAIL_CACHE_VERSION = 2;
 const COLOR_ANALYSIS_VERSION = 2;
 const IMAGE_THUMBNAIL_SIDE = 560;
@@ -63,14 +69,16 @@ const VIDEO_THUMBNAIL_WIDTH = 720;
 const VIDEO_THUMBNAIL_HEIGHT = 440;
 const AI_BATCH_CONCURRENCY = 5;
 const RUNNINGHUB_LOGIN_URL = 'https://www.runninghub.cn/user-center/1931373230005592065/webapp?inviteCode=rh-v1316';
+const PLUGIN_RELEASE_URL = 'https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/latest';
+const AI_GROUP_QR_IMAGE = './community/ai-group-qr.png';
 const RUNNINGHUB_GUIDE_IMAGES = [
-  { src: '/tutorials/runninghub/step-1.png', title: '第一步：登录后进入 API' },
-  { src: '/tutorials/runninghub/step-2.png', title: '第二步：选择 LLM' },
-  { src: '/tutorials/runninghub/step-3.png', title: '第三步：进入密钥' },
-  { src: '/tutorials/runninghub/step-4.png', title: '第四步：新建或复制 API Key' },
-  { src: '/tutorials/runninghub/step-5.png', title: '第五步：打开软件 AI 设置' },
-  { src: '/tutorials/runninghub/step-6.png', title: '第六步：选择 RunningHub 并粘贴密钥' },
-  { src: '/tutorials/runninghub/step-7.png', title: '第七步：获取模型、测试连接并保存' },
+  { src: './tutorials/runninghub/step-1.png', title: '第一步：登录后进入 API' },
+  { src: './tutorials/runninghub/step-2.png', title: '第二步：选择 LLM' },
+  { src: './tutorials/runninghub/step-3.png', title: '第三步：进入密钥' },
+  { src: './tutorials/runninghub/step-4.png', title: '第四步：新建或复制 API Key' },
+  { src: './tutorials/runninghub/step-5.png', title: '第五步：打开软件 AI 设置' },
+  { src: './tutorials/runninghub/step-6.png', title: '第六步：选择 RunningHub 并粘贴密钥' },
+  { src: './tutorials/runninghub/step-7.png', title: '第七步：获取模型、测试连接并保存' },
 ];
 
 const EMPTY_FILTERS = {
@@ -142,26 +150,27 @@ const SORT_OPTIONS = [
   { value: 'extension', label: '格式' },
 ];
 
+const RUNNINGHUB_LLM_BASE_URL = 'https://llm.runninghub.cn/v1';
+
 const DEFAULT_AI_SETTINGS = {
   enabled: false,
   activeProfileId: 'default',
   profiles: [],
-  provider: 'openai-compatible',
-  baseUrl: '',
+  provider: 'runninghub',
+  baseUrl: RUNNINGHUB_LLM_BASE_URL,
   apiKey: '',
-  model: '',
+  model: 'bytedance/doubao-seed-2.0-pro',
   note: '',
 };
 
-const RUNNINGHUB_LLM_BASE_URL = 'https://llm.runninghub.cn/v1';
 const DEFAULT_ADS = [];
 const DEFAULT_REMOTE_AD_SETTINGS = {
-  configUrl: '',
+  configUrl: DEFAULT_REMOTE_ADS_URL,
   cachedAds: [],
   lastFetchedAt: '',
 };
 const DEFAULT_UPDATE_SETTINGS = {
-  configUrl: '',
+  configUrl: DEFAULT_UPDATE_CONFIG_URL,
   lastCheckedAt: '',
   lastVersion: '',
 };
@@ -226,7 +235,7 @@ function normalizeUpdateSettings(settings = {}) {
   return {
     ...DEFAULT_UPDATE_SETTINGS,
     ...(settings || {}),
-    configUrl: String(settings?.configUrl || '').trim(),
+    configUrl: String(settings?.configUrl || DEFAULT_UPDATE_SETTINGS.configUrl || '').trim(),
     lastCheckedAt: settings?.lastCheckedAt || '',
     lastVersion: settings?.lastVersion || '',
   };
@@ -240,15 +249,18 @@ function formatVersionLabel(version) {
 
 function createAiProfile(seed = {}) {
   const id = seed.id || (window.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  const provider = seed.provider || 'openai-compatible';
+  const hasCustomConfig = Boolean(seed.apiKey || seed.baseUrl || seed.model);
+  const provider = seed.provider && (seed.provider !== 'openai-compatible' || hasCustomConfig)
+    ? seed.provider
+    : 'runninghub';
   return {
     id,
-    name: seed.name || '默认 API',
+    name: seed.name || (provider === 'runninghub' ? 'RunningHub API' : '默认 API'),
     note: seed.note || '',
     provider,
     baseUrl: seed.baseUrl || (provider === 'runninghub' ? RUNNINGHUB_LLM_BASE_URL : ''),
     apiKey: seed.apiKey || '',
-    model: seed.model || '',
+    model: seed.model || (provider === 'runninghub' ? 'bytedance/doubao-seed-2.0-pro' : ''),
   };
 }
 
@@ -658,26 +670,76 @@ function normalizeDatabase(database) {
   return database;
 }
 
-function Onboarding({ onChoose }) {
+function Onboarding({ onSelectExisting, onCreateNew }) {
+  const [step, setStep] = useState('start');
+  const [error, setError] = useState('');
+
+  async function run(action) {
+    setError('');
+    const result = await action();
+    if (result?.error) setError(result.message || '没有找到可用的素材库。');
+  }
+
   return (
     <main className="onboarding">
       <section className="onboarding-panel">
         <div className="brand-mark"><Archive size={28} /></div>
-        <h1>AI 素材库</h1>
-        <p>先选择一个本地目录作为素材库。应用会在里面创建 originals、thumbnails、database、backups 等目录，素材都保存在你电脑上。</p>
-        <div className="onboarding-actions">
-          <button className="primary-button" onClick={onChoose}>
-            <FolderPlus size={18} />
-            选择素材库位置
-          </button>
-        </div>
+        <h1>Cyrus Ai素材管理</h1>
+        {step === 'start' && (
+          <>
+            <p>你之前是否已经创建过 Cyrus Ai 素材库？如果有，选择已有素材库即可恢复原来的素材、文件夹、标签和提示词。</p>
+            <div className="onboarding-choice-grid">
+              <button type="button" onClick={() => setStep('existing')}>
+                <Folder size={18} />
+                <strong>我已经有素材库</strong>
+                <span>选择以前创建过的 Cyrus Ai 素材库。</span>
+              </button>
+              <button type="button" onClick={() => setStep('create')}>
+                <FolderPlus size={18} />
+                <strong>还没有，创建新库</strong>
+                <span>选择一个本地文件夹，软件会创建新的素材库结构。</span>
+              </button>
+            </div>
+          </>
+        )}
+        {step === 'existing' && (
+          <>
+            <p>请选择已有的 Cyrus Ai 素材库文件夹。正确的素材库里面会有 database、originals、thumbnails 等目录。</p>
+            <div className="onboarding-actions">
+              <button className="secondary-button" onClick={() => { setError(''); setStep('start'); }}>
+                <ChevronLeft size={16} />
+                返回
+              </button>
+              <button className="primary-button" onClick={() => run(onSelectExisting)}>
+                <Folder size={18} />
+                选择已有素材库
+              </button>
+            </div>
+          </>
+        )}
+        {step === 'create' && (
+          <>
+            <p>请选择一个本地文件夹来创建新素材库。软件会在里面创建 originals、thumbnails、database、backups 等目录。</p>
+            <div className="onboarding-actions">
+              <button className="secondary-button" onClick={() => { setError(''); setStep('start'); }}>
+                <ChevronLeft size={16} />
+                返回
+              </button>
+              <button className="primary-button" onClick={() => run(onCreateNew)}>
+                <FolderPlus size={18} />
+                创建新素材库
+              </button>
+            </div>
+          </>
+        )}
+        {error && <p className="onboarding-error">{error}</p>}
         <p className="tiny-copy">默认自动保存来源信息；商用前请确认素材授权。</p>
       </section>
     </main>
   );
 }
 
-function Sidebar({ folders, selectedFolderId, onSelectFolder, onCreateFolder, onRenameFolder, onDeleteFolder, onDropToFolder, onContextMenuFolder, onBlankPointerDown, stats }) {
+function Sidebar({ folders, selectedFolderId, onSelectFolder, onCreateFolder, onRenameFolder, onDeleteFolder, onDropToFolder, onContextMenuFolder, onBlankPointerDown, stats, thumbnailSize, onThumbnailSize }) {
   const [dragFolderId, setDragFolderId] = useState(null);
   const [collapsedFolderIds, setCollapsedFolderIds] = useState(() => {
     try {
@@ -822,6 +884,23 @@ function Sidebar({ folders, selectedFolderId, onSelectFolder, onCreateFolder, on
           </div>
         ))}
       </section>
+      <section className="nav-section display-section">
+        <div className="sidebar-zoom-control">
+          <div>
+            <span>列宽</span>
+            <em>{thumbnailSize}px</em>
+          </div>
+          <input
+            type="range"
+            min={THUMBNAIL_MIN}
+            max={THUMBNAIL_MAX}
+            step="2"
+            value={thumbnailSize}
+            onInput={(event) => onThumbnailSize(Number(event.currentTarget.value))}
+            onChange={(event) => onThumbnailSize(Number(event.currentTarget.value))}
+          />
+        </div>
+      </section>
     </aside>
   );
 }
@@ -917,7 +996,7 @@ function AdBanner({ ads, onOpenExternal }) {
 
   if (!activeAds.length) {
     return (
-      <div className="ad-banner empty" title="可在设置里管理广告位">
+      <div className="ad-banner empty" title="暂无广告内容">
         <ImageIcon size={15} />
         广告位
       </div>
@@ -978,14 +1057,14 @@ function AppTitlebar({ query, onQuery, onImport, onExportLibrary, onImportLibrar
     <header className="topbar">
       <div className="title-brand">
         <Archive size={22} />
-        <strong>素材库</strong>
+        <strong>Cyrus Ai素材管理</strong>
       </div>
       <div className="title-spacer" />
-      <div className="search-box">
-        <Search size={18} />
-        <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="搜索：动漫 蓝色 海报 / 格式:webp / ship png" />
-      </div>
-      <div className="topbar-actions">
+      <div className="topbar-search-tools">
+        <div className="search-box">
+          <Search size={18} />
+          <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="搜索：动漫 蓝色 海报 / 格式:webp / ship png" />
+        </div>
         <button className={`icon-tool trash-tool ${trashActive ? 'active' : ''}`} title="回收站" onClick={onOpenTrash}>
           <Trash2 size={16} />
           {trashCount > 0 && <span>{trashCount > 99 ? '99+' : trashCount}</span>}
@@ -1079,6 +1158,8 @@ function AppTitlebar({ query, onQuery, onImport, onExportLibrary, onImportLibrar
             </div>
           )}
         </div>
+      </div>
+      <div className="topbar-actions">
         <div className="view-switch">
           <button
             className="active"
@@ -1089,9 +1170,9 @@ function AppTitlebar({ query, onQuery, onImport, onExportLibrary, onImportLibrar
           </button>
         </div>
         <button className="ghost-button icon-only" title="AI 设置" onClick={onOpenSettings}><Settings size={17} /></button>
-        <button className="ghost-button rh-guide-button" title="RunningHub 登录与使用指引" onClick={onOpenRhGuide}>
+        <button className="ghost-button rh-guide-button" title="接入Ai指南" onClick={onOpenRhGuide}>
           <BookOpen size={16} />
-          登录/指引
+          接入Ai指南
         </button>
         <button className="ghost-button" onClick={onToggleTheme}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}{theme === 'dark' ? '浅色' : '暗色'}</button>
         <div className="import-menu-anchor" ref={importMenuRef}>
@@ -1161,10 +1242,6 @@ function CollectionHeader({ count, title = '全部素材', subtitle = null, filt
   const hasFilters = filterChips.length > 0 || hasQuery;
   return (
     <div className="collection-header">
-      <div className="collection-title-row">
-        <h1>{title}</h1>
-        <p>{subtitle || `${count.toLocaleString('zh-CN')} 个素材`}</p>
-      </div>
       <ImportProgressStrip progress={importProgress} />
       <div className="collection-meta">
         {filterChips.map((chip) => (
@@ -1875,28 +1952,6 @@ function PromptResultCard({ asset, onCopyText }) {
   );
 }
 
-function StatusBar({ count, selectedCount, thumbnailSize, onThumbnailSize }) {
-  return (
-    <footer className="status-bar">
-      <span>{count} 个素材</span>
-      <span>{selectedCount ? `已选 ${selectedCount} 个` : '未选择批量素材'}</span>
-      <div className="zoom-control">
-        <span>列宽</span>
-        <input
-          type="range"
-          min={THUMBNAIL_MIN}
-          max={THUMBNAIL_MAX}
-          step="2"
-          value={thumbnailSize}
-          onInput={(event) => onThumbnailSize(Number(event.currentTarget.value))}
-          onChange={(event) => onThumbnailSize(Number(event.currentTarget.value))}
-        />
-        <span>{thumbnailSize}px</span>
-      </div>
-    </footer>
-  );
-}
-
 function InlinePreview({ asset, hasPrevious = false, hasNext = false, onPrevious, onNext, onClose, onDelete, onSaveEditedCopy }) {
   const [scale, setScale] = useState('fit');
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -2390,7 +2445,7 @@ function DeleteAssetsDialog({ assets, permanent = false, onCancel, onConfirm }) 
   );
 }
 
-function ConfirmActionDialog({ title, message, items = [], confirmText = '确认删除', onCancel, onConfirm }) {
+function ConfirmActionDialog({ title, message, items = [], confirmText = '确认删除', variant = 'danger', onCancel, onConfirm }) {
   useConfirmShortcut({
     enabled: true,
     onConfirm,
@@ -2409,7 +2464,7 @@ function ConfirmActionDialog({ title, message, items = [], confirmText = '确认
         )}
         <div className="dialog-actions">
           <button onClick={onCancel}>取消</button>
-          <button className="danger-button" onClick={onConfirm}>{confirmText}</button>
+          <button className={variant === 'danger' ? 'danger-button' : 'primary-button'} onClick={onConfirm}>{confirmText}</button>
         </div>
       </section>
     </div>
@@ -2566,17 +2621,19 @@ function AdManagerDialog({ open, ads, remoteConfig, onCancel, onSave, onChooseIm
       const result = await onChooseImage();
       if (!result?.path) return;
       const now = new Date().toISOString();
-      setDraft((current) => [
-        ...current,
-        createAdItem({
+      const ad = createAdItem({
           title: result.name || '广告图片',
           imagePath: result.path,
           url: '',
           enabled: true,
           createdAt: now,
           updatedAt: now,
-        }),
-      ]);
+      });
+      setDraft((current) => {
+        const next = [...current, ad];
+        onSave(normalizeAdSettings(next), { ...normalizeRemoteAdSettings(remoteConfig), configUrl: configUrl.trim() });
+        return next;
+      });
     } catch (addError) {
       setError(`添加广告失败：${addError?.message || '请选择可读取的图片。'}`);
     }
@@ -2589,7 +2646,11 @@ function AdManagerDialog({ open, ads, remoteConfig, onCancel, onSave, onChooseIm
   }
 
   function removeAd(id) {
-    setDraft((current) => current.filter((ad) => ad.id !== id));
+    setDraft((current) => {
+      const next = current.filter((ad) => ad.id !== id);
+      onSave(normalizeAdSettings(next), { ...normalizeRemoteAdSettings(remoteConfig), configUrl: configUrl.trim() });
+      return next;
+    });
   }
 
   function save() {
@@ -2612,7 +2673,9 @@ function AdManagerDialog({ open, ads, remoteConfig, onCancel, onSave, onChooseIm
   async function exportPackage() {
     try {
       setError('');
-      const result = await onExportPackage?.(normalizeAdSettings(draft));
+      const normalizedDraft = normalizeAdSettings(draft);
+      onSave(normalizedDraft, { ...normalizeRemoteAdSettings(remoteConfig), configUrl: configUrl.trim() });
+      const result = await onExportPackage?.(normalizedDraft);
       if (result?.path) setRemoteStatus(`广告包已导出：${result.path}`);
     } catch (exportError) {
       setError(`导出失败：${exportError?.message || '请检查广告图片是否可访问。'}`);
@@ -2624,86 +2687,90 @@ function AdManagerDialog({ open, ads, remoteConfig, onCancel, onSave, onChooseIm
     <div className="modal-backdrop">
       <section className="dialog ad-dialog">
         <button className="dialog-close" title="关闭" onClick={onCancel}><X size={17} /></button>
-        <h3>广告配置生成器</h3>
-        <p>按顺序操作：先做广告内容，再导出广告包，上传后把云端 ads.json 地址粘贴回来测试并保存。</p>
-        <div className="ad-step-card">
-          <div className="ad-step-head">
-            <span>1</span>
-            <div>
-              <strong>添加广告图片和跳转链接</strong>
-              <em>标题只给你管理用，用户不会看到。推荐 16:5 横幅图，例如 1600 x 500。</em>
-            </div>
-            <button className="primary-button" onClick={addImage}>
-              <ImageIcon size={16} />
-              添加图片广告
-            </button>
-          </div>
-          <div className="ad-editor-list">
-            {draft.length ? draft.map((ad) => (
-              <div className="ad-editor-item" key={ad.id}>
-                <img src={adImageSrc(ad)} alt="" />
-                <div className="ad-editor-fields">
-                  <label>
-                    <span>广告名称</span>
-                    <input value={ad.title} onChange={(event) => updateAd(ad.id, { title: event.target.value })} placeholder="方便自己识别" />
-                  </label>
-                  <label>
-                    <span>点击跳转网址</span>
-                    <input value={ad.url} onChange={(event) => updateAd(ad.id, { url: event.target.value })} placeholder="例如 https://example.com" />
-                  </label>
-                  <label className="ad-enable-row">
-                    <input type="checkbox" checked={ad.enabled} onChange={(event) => updateAd(ad.id, { enabled: event.target.checked })} />
-                    启用这个广告
-                  </label>
-                </div>
-                <button className="danger-text ad-delete-button" onClick={() => removeAd(ad.id)}>删除</button>
-              </div>
-            )) : (
-              <div className="ad-empty-state">
-                <ImageIcon size={22} />
-                <strong>还没有广告图片</strong>
-                <span>先点击右上角“添加图片广告”。</span>
-              </div>
-            )}
-          </div>
+        <div className="ad-dialog-head">
+          <h3>广告配置生成器</h3>
+          <p>按顺序操作：先做广告内容，再导出带签名的广告包，上传后把云端 ads.json 地址粘贴回来测试并保存。</p>
         </div>
-        <div className="ad-step-grid">
-          <div className="ad-step-card compact">
+        <div className="ad-dialog-body">
+          <div className="ad-step-card">
             <div className="ad-step-head">
-              <span>2</span>
+              <span>1</span>
               <div>
-                <strong>导出广告包</strong>
-                <em>会生成 ads.json 和 ads 图片文件夹，用来上传到 GitHub Pages 或云存储。</em>
+                <strong>添加广告图片和跳转链接</strong>
+                <em>标题只给你管理用，用户不会看到。推荐 21:9 横幅图，例如 2100 x 900。</em>
               </div>
-              <button className="ghost-button" onClick={exportPackage} disabled={!draft.length}>
-                <ExternalLink size={15} />
-                导出广告包
+              <button className="primary-button" onClick={addImage}>
+                <ImageIcon size={16} />
+                添加图片广告
               </button>
             </div>
+            <div className="ad-editor-list">
+              {draft.length ? draft.map((ad) => (
+                <div className="ad-editor-item" key={ad.id}>
+                  <img src={adImageSrc(ad)} alt="" />
+                  <div className="ad-editor-fields">
+                    <label>
+                      <span>广告名称</span>
+                      <input value={ad.title} onChange={(event) => updateAd(ad.id, { title: event.target.value })} placeholder="方便自己识别" />
+                    </label>
+                    <label>
+                      <span>点击跳转网址</span>
+                      <input value={ad.url} onChange={(event) => updateAd(ad.id, { url: event.target.value })} placeholder="例如 https://example.com" />
+                    </label>
+                    <label className="ad-enable-row">
+                      <input type="checkbox" checked={ad.enabled} onChange={(event) => updateAd(ad.id, { enabled: event.target.checked })} />
+                      启用这个广告
+                    </label>
+                  </div>
+                  <button className="danger-text ad-delete-button" onClick={() => removeAd(ad.id)}>删除</button>
+                </div>
+              )) : (
+                <div className="ad-empty-state">
+                  <ImageIcon size={22} />
+                  <strong>还没有广告图片</strong>
+                  <span>先点击右上角“添加图片广告”。</span>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="ad-step-card compact">
-            <div className="ad-step-head">
-              <span>3</span>
-              <div>
-                <strong>上传后填写云端地址</strong>
-                <em>把上传后的 ads.json 链接贴到这里，测试成功后保存。</em>
+          <div className="ad-step-grid">
+            <div className="ad-step-card compact">
+              <div className="ad-step-head">
+                <span>2</span>
+                <div>
+                  <strong>导出广告包</strong>
+                  <em>会生成带签名的 ads.json 和 ads 图片文件夹，用来上传到 GitHub Pages 或云存储。</em>
+                </div>
+                <button className="ghost-button" onClick={exportPackage} disabled={!draft.length}>
+                  <ExternalLink size={15} />
+                  导出广告包
+                </button>
               </div>
             </div>
-            <label className="ad-remote-field">
-              <span>云端 ads.json 地址</span>
-              <div>
-                <input value={configUrl} onChange={(event) => { setConfigUrl(event.target.value); setRemoteStatus(''); }} placeholder="例如 https://你的用户名.github.io/广告仓库/ads.json" />
-                <button type="button" onClick={testRemote} disabled={!configUrl.trim()}>测试读取</button>
+            <div className="ad-step-card compact">
+              <div className="ad-step-head">
+                <span>3</span>
+                <div>
+                  <strong>上传后填写云端地址</strong>
+                  <em>把上传后的 ads.json 链接贴到这里，测试成功后保存。</em>
+                </div>
               </div>
-            </label>
+              <label className="ad-remote-field">
+                <span>云端 ads.json 地址</span>
+                <div>
+                  <input value={configUrl} onChange={(event) => { setConfigUrl(event.target.value); setRemoteStatus(''); }} placeholder="例如 https://你的用户名.github.io/广告仓库/ads.json" />
+                  <button type="button" onClick={testRemote} disabled={!configUrl.trim()}>测试读取</button>
+                </div>
+              </label>
+            </div>
           </div>
+          <div className="ad-size-hint">
+            <strong>图片格式提醒</strong>
+            <span>支持 PNG / JPG / WebP / GIF / SVG。正式使用时建议上传新文件名，避免用户看到缓存旧图。</span>
+          </div>
+          {remoteStatus && <p className="form-success">{remoteStatus}</p>}
+          {error && <p className="form-error">{error}</p>}
         </div>
-        <div className="ad-size-hint">
-          <strong>图片格式提醒</strong>
-          <span>支持 PNG / JPG / WebP / GIF / SVG。正式使用时建议上传新文件名，避免用户看到缓存旧图。</span>
-        </div>
-        {remoteStatus && <p className="form-success">{remoteStatus}</p>}
-        {error && <p className="form-error">{error}</p>}
         <div className="dialog-actions">
           <button onClick={onCancel}>取消</button>
           <button className="primary-button" onClick={save}>保存</button>
@@ -2806,12 +2873,12 @@ function RunningHubGuideDialog({ open, onCancel, onOpenExternal }) {
         <button className="dialog-close" title="关闭" onClick={onCancel}><X size={17} /></button>
         <div className="rh-guide-head">
           <div>
-            <h3>RunningHub 登录与使用指引</h3>
+            <h3>接入Ai指南</h3>
             <p>先打开 RH 登录入口，复制 API Key 后回到软件 AI 设置里粘贴、获取模型、测试连接并保存。</p>
           </div>
           <button className="primary-button rh-login-button" onClick={openRunningHub}>
             <ExternalLink size={15} />
-            打开 RH 登录
+            注册RunningHub开启Ai管理
           </button>
         </div>
         {error && <p className="form-error">{error}</p>}
@@ -2928,6 +2995,8 @@ function FolderNameDialog({ mode, folder, parentFolder, folders, onCancel, onCon
 
 function AiSettingsDialog({
   open,
+  rootPath,
+  libraryStats,
   settings,
   testing,
   loadingModels,
@@ -2938,10 +3007,16 @@ function AiSettingsDialog({
   onSave,
   onTest,
   onListModels,
+  onOpenLibraryRoot,
+  onRequestSwitchLibrary,
   onOpenExternal,
+  onCopyText,
   onOpenAdManager,
   onSaveUpdateSettings,
   onCheckUpdate,
+  onInstall,
+  onChooseUpdateInstaller,
+  onExportUpdateConfig,
 }) {
   const [draft, setDraft] = useState(() => normalizeAiSettings(settings));
   const [error, setError] = useState('');
@@ -2950,10 +3025,27 @@ function AiSettingsDialog({
   const [modelOptions, setModelOptions] = useState([]);
   const [modelMessage, setModelMessage] = useState('');
   const [pendingDeleteProfile, setPendingDeleteProfile] = useState(null);
+  const [extensionInfo, setExtensionInfo] = useState(null);
+  const [extensionMessage, setExtensionMessage] = useState('');
   const [updateConfigUrl, setUpdateConfigUrl] = useState(() => normalizeUpdateSettings(updateSettings).configUrl);
+  const [siteSaved, setSiteSaved] = useState(false);
+  const [showAdminSiteSettings, setShowAdminSiteSettings] = useState(() => localStorage.getItem('assetVaultAdminSiteSettings') === '1');
+  const [updateDraft, setUpdateDraft] = useState({
+    version: '',
+    title: '发现新版本',
+    installerUrl: '',
+    fileName: '',
+    sha256: '',
+    size: 0,
+    notes: '',
+  });
+  const [activeSettingsPage, setActiveSettingsPage] = useState('library');
+  const nameInputRef = useRef(null);
+  const aiProfileFormRef = useRef(null);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       setDraft(normalizeAiSettings(settings));
       setError('');
       setSaved(false);
@@ -2961,11 +3053,41 @@ function AiSettingsDialog({
       setModelOptions([]);
       setModelMessage('');
       setPendingDeleteProfile(null);
+      setExtensionMessage('');
       setUpdateConfigUrl(normalizeUpdateSettings(updateSettings).configUrl);
+      setSiteSaved(false);
+      setActiveSettingsPage('library');
     }
-  }, [open, updateSettings]);
+    wasOpenRef.current = open;
+  }, [open, settings, updateSettings]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    window.assetVault.getExtensionInfo?.().then((info) => {
+      if (!cancelled) setExtensionInfo(info || null);
+    }).catch(() => {
+      if (!cancelled) setExtensionInfo(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    localStorage.setItem('assetVaultAdminSiteSettings', showAdminSiteSettings ? '1' : '0');
+  }, [showAdminSiteSettings]);
 
   const activeProfile = draft.profiles.find((profile) => profile.id === draft.activeProfileId) || draft.profiles[0] || createAiProfile();
+
+  function selectProfile(profileId) {
+    setSaved(false);
+    setError('');
+    setModelQuery('');
+    setModelOptions([]);
+    setModelMessage('');
+    setDraft((current) => ({ ...current, activeProfileId: profileId }));
+  }
 
   function updateActiveProfile(patch) {
     setSaved(false);
@@ -2993,15 +3115,24 @@ function AiSettingsDialog({
       activeProfileId: profile.id,
       profiles: [...current.profiles, profile],
     }));
+    window.setTimeout(() => nameInputRef.current?.focus(), 0);
   }
 
-  function requestDeleteProfile() {
+  function renameProfile(profileId) {
+    selectProfile(profileId);
+    window.setTimeout(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }, 0);
+  }
+
+  function requestDeleteProfile(profile = activeProfile) {
     setSaved(false);
     if (draft.profiles.length <= 1) {
       setError('至少保留一个 API 配置。');
       return;
     }
-    setPendingDeleteProfile(activeProfile);
+    setPendingDeleteProfile(profile);
   }
 
   function deleteProfile() {
@@ -3010,42 +3141,43 @@ function AiSettingsDialog({
       const nextProfiles = current.profiles.filter((profile) => profile.id !== pendingDeleteProfile.id);
       return {
         ...current,
-        activeProfileId: nextProfiles[0]?.id || 'default',
+        activeProfileId: current.activeProfileId === pendingDeleteProfile.id
+          ? (nextProfiles[0]?.id || 'default')
+          : current.activeProfileId,
         profiles: nextProfiles,
       };
     });
     setPendingDeleteProfile(null);
   }
 
-  function validate() {
-    const profile = activeProfile;
+  function validate(profile = activeProfile, sourceDraft = draft) {
     const provider = profile.provider || 'openai-compatible';
     const baseUrl = provider === 'runninghub'
-      ? (profile.baseUrl.trim() || RUNNINGHUB_LLM_BASE_URL)
-      : profile.baseUrl.trim();
+      ? (String(profile.baseUrl || '').trim() || RUNNINGHUB_LLM_BASE_URL)
+      : String(profile.baseUrl || '').trim();
     const next = {
-      ...draft,
+      ...sourceDraft,
       ...profile,
       enabled: true,
       activeProfileId: profile.id,
-      profiles: draft.profiles.map((item) => (
+      profiles: sourceDraft.profiles.map((item) => (
         item.id === profile.id
           ? {
               ...item,
-              name: (item.name || '未命名 API').trim(),
-              note: (item.note || '').trim(),
+              name: String(item.name || '未命名 API').trim(),
+              note: String(item.note || '').trim(),
               provider,
               baseUrl,
-              apiKey: item.apiKey.trim(),
-              model: item.model.trim(),
+              apiKey: String(item.apiKey || '').trim(),
+              model: String(item.model || '').trim(),
             }
           : item
       )),
       provider,
       baseUrl,
-      apiKey: profile.apiKey.trim(),
-      model: profile.model.trim(),
-      note: profile.note.trim(),
+      apiKey: String(profile.apiKey || '').trim(),
+      model: String(profile.model || '').trim(),
+      note: String(profile.note || '').trim(),
     };
     if (!next.baseUrl) return setError('请填写 API 地址。'), null;
     if (!next.apiKey) return setError('请填写 API Key。'), null;
@@ -3058,8 +3190,78 @@ function AiSettingsDialog({
     const next = validate();
     if (next) {
       onSave(next);
-      onSaveUpdateSettings?.({ ...normalizeUpdateSettings(updateSettings), configUrl: updateConfigUrl.trim() });
       setSaved(true);
+    }
+  }
+
+  function enableProfile(profile) {
+    const nextDraft = { ...draft, activeProfileId: profile.id };
+    setDraft(nextDraft);
+    const next = validate(profile, nextDraft);
+    if (next) {
+      onSave(next);
+      setSaved(true);
+    } else {
+      setSaved(false);
+    }
+  }
+
+  function saveSiteConfig() {
+    onSaveUpdateSettings?.({ ...normalizeUpdateSettings(updateSettings), configUrl: updateConfigUrl.trim() });
+    setSiteSaved(true);
+  }
+
+  function checkOrInstallUpdate() {
+    const normalizedUpdate = normalizeUpdateSettings(updateSettings);
+    const configUrl = (updateConfigUrl.trim() || normalizedUpdate.configUrl || DEFAULT_UPDATE_CONFIG_URL).trim();
+    if (updateStatus?.installerPath && ['downloaded', 'downloaded-later'].includes(updateStatus?.state)) {
+      onInstall?.();
+      return;
+    }
+    if (IS_ADMIN_BUILD) {
+      onSaveUpdateSettings?.({ ...normalizedUpdate, configUrl });
+      setUpdateConfigUrl(configUrl);
+    }
+    onCheckUpdate?.({ manual: true, configUrl });
+  }
+
+  async function chooseUpdateInstaller() {
+    try {
+      setError('');
+      const result = await onChooseUpdateInstaller?.();
+      if (!result) return;
+      setUpdateDraft((current) => ({
+        ...current,
+        fileName: result.fileName || current.fileName,
+        sha256: result.sha256 || current.sha256,
+        size: result.size || 0,
+      }));
+    } catch (chooseError) {
+      setError(`选择安装包失败：${chooseError?.message || '请重新选择安装包。'}`);
+    }
+  }
+
+  async function exportSignedUpdateConfig() {
+    try {
+      setError('');
+      if (!hasConfigSigningKey()) throw new Error('当前版本缺少配置签名钥匙，请使用管理版导出 update.json。');
+      const notes = String(updateDraft.notes || '')
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const result = await onExportUpdateConfig?.({
+        version: updateDraft.version,
+        title: updateDraft.title || '发现新版本',
+        installerUrl: updateDraft.installerUrl,
+        fileName: updateDraft.fileName,
+        sha256: updateDraft.sha256,
+        size: updateDraft.size,
+        notes,
+        force: false,
+      }, CONFIG_PRIVATE_KEY_BASE64);
+      if (result?.path) setSiteSaved(true);
+    } catch (exportError) {
+      setError(`导出 update.json 失败：${exportError?.message || '请检查版本号、下载链接和签名钥匙。'}`);
     }
   }
 
@@ -3076,8 +3278,79 @@ function AiSettingsDialog({
     }
   }
 
+  async function getLatestExtensionInfo() {
+    const info = await window.assetVault.getExtensionInfo?.();
+    if (info) setExtensionInfo(info);
+    return info || extensionInfo;
+  }
+
+  async function openExtensionFolder() {
+    try {
+      setExtensionMessage('');
+      const info = await getLatestExtensionInfo();
+      if (!info?.exists || !info.path) {
+        setExtensionMessage('没有找到插件文件夹，请确认当前版本安装完整。');
+        return;
+      }
+      const errorMessage = await window.assetVault.openPath?.(info.path);
+      if (errorMessage) setExtensionMessage(`打开失败：${errorMessage}`);
+    } catch (openError) {
+      setExtensionMessage(`打开插件文件夹失败：${openError?.message || '请稍后重试。'}`);
+    }
+  }
+
+  async function copyExtensionPath() {
+    try {
+      setExtensionMessage('');
+      const info = await getLatestExtensionInfo();
+      if (!info?.path) {
+        setExtensionMessage('没有找到可复制的插件路径。');
+        return;
+      }
+      await onCopyText?.(info.path, '插件路径已复制。');
+      setExtensionMessage('插件路径已复制。');
+    } catch {
+      setExtensionMessage('复制插件路径失败。');
+    }
+  }
+
+  async function openBrowserExtensionPage(url = 'chrome://extensions/') {
+    try {
+      setExtensionMessage('');
+      await onOpenExternal?.(url);
+    } catch (openError) {
+      setExtensionMessage(`打开扩展管理页失败：${openError?.message || '可以手动在浏览器地址栏输入 chrome://extensions/'}`);
+    }
+  }
+
+  async function prepareExtensionInstall(browser = 'chrome') {
+    try {
+      setExtensionMessage('');
+      const result = await window.assetVault.prepareExtensionInstall?.(browser);
+      if (result) {
+        setExtensionInfo((current) => ({ ...current, ...result }));
+        await onCopyText?.(result.path, '插件路径已复制。');
+      }
+      setExtensionMessage(browser === 'edge'
+        ? '已打开 Edge 扩展页，并复制插件路径。请开启开发者模式后加载这个文件夹。'
+        : '已打开 Chrome 扩展页，并复制插件路径。请开启开发者模式后加载这个文件夹。');
+    } catch (installError) {
+      setExtensionMessage(`准备插件失败：${installError?.message || '请确认软件安装完整。'}`);
+    }
+  }
+
+  async function openPluginReleasePage() {
+    try {
+      setExtensionMessage('');
+      await onOpenExternal?.(extensionInfo?.githubUrl || PLUGIN_RELEASE_URL);
+    } catch (openError) {
+      setExtensionMessage(`打开 GitHub 下载页失败：${openError?.message || '请稍后重试。'}`);
+    }
+  }
+
   async function loadModels() {
     const profile = activeProfile;
+    const scrollTop = aiProfileFormRef.current?.scrollTop || 0;
     const provider = profile.provider || 'openai-compatible';
     const baseUrl = provider === 'runninghub'
       ? (profile.baseUrl.trim() || RUNNINGHUB_LLM_BASE_URL)
@@ -3097,14 +3370,20 @@ function AiSettingsDialog({
     if (result?.models?.length) {
       setModelOptions(result.models);
       setModelMessage(`已读取 ${result.models.length} 个模型。`);
+      window.requestAnimationFrame(() => {
+        if (aiProfileFormRef.current) aiProfileFormRef.current.scrollTop = scrollTop;
+      });
     } else if (result) {
       setModelOptions([]);
       setModelMessage('没有读取到模型列表，可以继续手动填写模型名称。');
+      window.requestAnimationFrame(() => {
+        if (aiProfileFormRef.current) aiProfileFormRef.current.scrollTop = scrollTop;
+      });
     }
   }
 
   useConfirmShortcut({
-    enabled: open && !pendingDeleteProfile,
+    enabled: open && activeSettingsPage === 'ai' && !pendingDeleteProfile,
     onConfirm: save,
     onCancel,
   });
@@ -3116,194 +3395,576 @@ function AiSettingsDialog({
     <div className="modal-backdrop">
       <section className="dialog ai-dialog">
         <button className="dialog-close" title="关闭" onClick={onCancel}><X size={17} /></button>
-        <h3>AI 设置</h3>
-        <p>可以保存多个 OpenAI 兼容、第三方聚合或 RunningHub LLM 方案，点击左侧方案即可快速切换。请使用支持图片识别的模型。</p>
-        <div className="ai-settings-layout">
+        <h3>设置</h3>
+        <p>左侧选择功能，右侧修改详细设置。</p>
+        <div className="settings-app-layout">
+          <aside className="settings-sidebar">
+            <button
+              type="button"
+              className={activeSettingsPage === 'library' ? 'active' : ''}
+              onClick={() => setActiveSettingsPage('library')}
+            >
+              <Folder size={15} />
+              <span>素材库</span>
+            </button>
+            <button
+              type="button"
+              className={activeSettingsPage === 'ai' ? 'active' : ''}
+              onClick={() => setActiveSettingsPage('ai')}
+            >
+              <Sparkles size={15} />
+              <span>AI 接口</span>
+            </button>
+            <button
+              type="button"
+              className={activeSettingsPage === 'community' ? 'active' : ''}
+              onClick={() => setActiveSettingsPage('community')}
+            >
+              <Users size={15} />
+              <span>加入Ai交流群</span>
+            </button>
+            <button
+              type="button"
+              className={activeSettingsPage === 'update' ? 'active' : ''}
+              onClick={() => setActiveSettingsPage('update')}
+            >
+              <RefreshCw size={15} />
+              <span>软件更新</span>
+            </button>
+            <button
+              type="button"
+              className={activeSettingsPage === 'extension' ? 'active' : ''}
+              onClick={() => setActiveSettingsPage('extension')}
+            >
+              <Puzzle size={15} />
+              <span>素材采集插件</span>
+            </button>
+            {IS_ADMIN_BUILD && (
+              <button
+                type="button"
+                className={activeSettingsPage === 'admin' ? 'active' : ''}
+                onClick={() => setActiveSettingsPage('admin')}
+              >
+                <Settings size={15} />
+                <span>管理设置</span>
+              </button>
+            )}
+          </aside>
+          <div className="settings-detail-panel">
+            {activeSettingsPage === 'library' && (
+              <div className="library-settings-page">
+                <div className="section-label">
+                  <strong>素材库</strong>
+                  <span>素材、文件夹、标签、提示词和缩略图都保存在这个本地目录里。</span>
+                </div>
+                <div className="library-settings-card">
+                  <div className="library-settings-main">
+                    <span className="library-settings-icon"><Folder size={16} /></span>
+                    <div>
+                      <strong>当前素材库位置</strong>
+                      <span title={rootPath}>{rootPath || '还没有选择素材库'}</span>
+                    </div>
+                  </div>
+                  <div className="library-settings-meta">
+                    <span>{(libraryStats?.assets || 0).toLocaleString('zh-CN')} 个素材</span>
+                    <span>{(libraryStats?.folders || 0).toLocaleString('zh-CN')} 个文件夹</span>
+                  </div>
+                  <div className="library-settings-actions">
+                    <button type="button" className="secondary-button" onClick={onOpenLibraryRoot} disabled={!rootPath}>
+                      打开位置
+                    </button>
+                    <button type="button" className="secondary-button" onClick={onRequestSwitchLibrary}>
+                      切换素材库
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-note inline-note">
+                  切换素材库不会移动、删除或覆盖当前素材库，只是让软件打开另一个本地素材库目录。
+                </div>
+              </div>
+            )}
+            {activeSettingsPage === 'update' && (
+              <div className="library-settings-page">
+                <div className="section-label">
+                  <strong>软件更新</strong>
+                  <span>可以主动检测新版本。发现新版后会自动下载，下载完成再提示安装，不会影响素材库数据。</span>
+                </div>
+                <div className="library-settings-card update-settings-card">
+                  <div className="library-settings-main">
+                    <span className="library-settings-icon"><RefreshCw size={16} /></span>
+                    <div>
+                      <strong>当前版本 {formatVersionLabel(appVersion)}</strong>
+                      <span>
+                        {updateStatus?.state === 'checking'
+                          ? '正在检测新版本...'
+                          : updateStatus?.state === 'downloading'
+                            ? `正在下载更新 ${Math.round(updateStatus?.percent || 0)}%`
+                            : updateStatus?.state === 'downloaded' || updateStatus?.state === 'downloaded-later'
+                              ? `新版 ${formatVersionLabel(updateStatus?.latestVersion || updateStatus?.update?.version)} 已下载完成`
+                              : updateStatus?.state === 'latest'
+                                ? '已经是最新版本'
+                                : updateStatus?.state === 'failed'
+                                  ? (updateStatus?.message || '更新检测失败，可以稍后重试')
+                                  : '点击右侧按钮检查是否有新版'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="library-settings-meta">
+                    {normalizeUpdateSettings(updateSettings).lastCheckedAt && <span>上次检测 {formatDate(normalizeUpdateSettings(updateSettings).lastCheckedAt)}</span>}
+                    {updateStatus?.latestVersion && <span>最新 {formatVersionLabel(updateStatus.latestVersion)}</span>}
+                  </div>
+                  <div className="library-settings-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={checkOrInstallUpdate}
+                      disabled={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading'}
+                    >
+                      <RefreshCw size={14} className={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading' ? 'spin-icon' : ''} />
+                      {updateStatus?.state === 'checking'
+                        ? '检查中'
+                        : updateStatus?.state === 'downloading'
+                          ? '下载中'
+                          : updateStatus?.installerPath && ['downloaded', 'downloaded-later'].includes(updateStatus?.state)
+                            ? '现在安装'
+                            : '检测新版本'}
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-note inline-note">
+                  更新前会先保存当前素材库。软件升级不会删除素材、文件夹、标签、反推提示词和来源信息。
+                </div>
+              </div>
+            )}
+            {activeSettingsPage === 'extension' && (
+              <div className="library-settings-page">
+                <div className="section-label">
+                  <strong>素材采集插件</strong>
+                  <span>插件用于在浏览器里扫描网页素材，再收集到本地素材库。软件会先准备好插件，浏览器里需要用户确认加载一次。</span>
+                </div>
+                <div className="plugin-install-card">
+                  <div className="plugin-install-head">
+                    <span className="library-settings-icon"><Puzzle size={16} /></span>
+                    <div>
+                      <strong>{extensionInfo?.name || 'Cyrus 素材采集插件'}</strong>
+                      <span>{extensionInfo?.version ? `插件版本 ${extensionInfo.version}` : '安装后可在浏览器扩展里启用'}</span>
+                    </div>
+                  </div>
+                  <div className="plugin-install-hero">
+                    <div>
+                      <strong>安装浏览器采集插件</strong>
+                      <span>点击后自动打开扩展管理页，并复制插件文件夹路径。</span>
+                    </div>
+                    <div className="plugin-install-buttons">
+                      <button type="button" className="primary-button" onClick={() => prepareExtensionInstall('chrome')}>
+                        <Puzzle size={14} />
+                        安装到 Chrome
+                      </button>
+                      <button type="button" className="secondary-button" onClick={() => prepareExtensionInstall('edge')}>
+                        <Puzzle size={14} />
+                        安装到 Edge
+                      </button>
+                    </div>
+                  </div>
+                  <div className="plugin-path-box">
+                    <span>插件文件夹</span>
+                    <strong title={extensionInfo?.path || ''}>{extensionInfo?.path || '正在读取插件路径...'}</strong>
+                  </div>
+                  <div className="plugin-action-grid">
+                    <button type="button" className="secondary-button" onClick={openExtensionFolder}>
+                      <Folder size={14} />
+                      打开插件文件夹
+                    </button>
+                    <button type="button" className="secondary-button" onClick={copyExtensionPath}>
+                      <Copy size={14} />
+                      复制插件路径
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => openBrowserExtensionPage(extensionInfo?.chromeExtensionsUrl || 'chrome://extensions/')}>
+                      <ExternalLink size={14} />
+                      打开 Chrome 扩展页
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => openBrowserExtensionPage(extensionInfo?.edgeExtensionsUrl || 'edge://extensions/')}>
+                      <ExternalLink size={14} />
+                      打开 Edge 扩展页
+                    </button>
+                  </div>
+                  {extensionMessage && <div className="settings-success small-success">{extensionMessage}</div>}
+                </div>
+                <div className="plugin-steps">
+                  <div>
+                    <span>1</span>
+                    <strong>点击安装按钮</strong>
+                    <p>软件会打开浏览器扩展页，并把插件路径复制好。</p>
+                  </div>
+                  <div>
+                    <span>2</span>
+                    <strong>开启开发者模式</strong>
+                    <p>扩展页面右上角一般会有“开发者模式”开关。</p>
+                  </div>
+                  <div>
+                    <span>3</span>
+                    <strong>加载插件文件夹</strong>
+                    <p>点击“加载已解压的扩展程序”，选择上面的插件文件夹。</p>
+                  </div>
+                </div>
+                <div className="site-settings-actions">
+                  <div className="site-settings-summary">
+                    <strong>GitHub 单独下载</strong>
+                    <span>如果安装包里没有插件，或想单独更新插件，可以去 Release 页面下载插件压缩包。</span>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={openPluginReleasePage}>
+                    <ExternalLink size={14} />
+                    打开 GitHub
+                  </button>
+                </div>
+              </div>
+            )}
+            {activeSettingsPage === 'community' && (
+              <div className="library-settings-page">
+                <div className="section-label">
+                  <strong>加入Ai交流群</strong>
+                  <span>扫码添加好友，加入 Cyrus Ai素材管理交流群，方便获取使用帮助和后续功能通知。</span>
+                </div>
+                <div className="community-qr-card">
+                  <div className="community-qr-frame">
+                    <img src={AI_GROUP_QR_IMAGE} alt="加入Ai交流群二维码" />
+                  </div>
+                  <div className="community-qr-copy">
+                    <strong>微信扫码加入</strong>
+                    <span>打开微信扫一扫，添加后备注 Cyrus，即可加入交流群。</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeSettingsPage === 'ai' && (
+              <div className="ai-settings-layout">
           <div className="ai-profile-list">
             {draft.profiles.map((profile) => (
-              <button
-                className={profile.id === draft.activeProfileId ? 'active' : ''}
+              <div
+                className={`ai-profile-item ${profile.id === draft.activeProfileId ? 'active' : ''}`}
                 key={profile.id}
-                onClick={() => setDraft((current) => ({ ...current, activeProfileId: profile.id }))}
               >
-                <strong>{profile.name || '未命名 API'}</strong>
-                <span>{profile.model || '未填写模型'}</span>
-              </button>
+                <button
+                  type="button"
+                  className="profile-select"
+                  onClick={() => selectProfile(profile.id)}
+                >
+                  <strong>{profile.name || '未命名 API'}</strong>
+                  <span>{profile.model || '未填写模型'}</span>
+                </button>
+                <div className="profile-actions">
+                  <button
+                    type="button"
+                    className={profile.id === draft.activeProfileId ? 'is-active' : ''}
+                    title={profile.id === draft.activeProfileId ? '当前正在使用' : '启用这个 API'}
+                    onClick={() => enableProfile(profile)}
+                  >
+                    {profile.id === draft.activeProfileId ? '已启用' : '启用'}
+                  </button>
+                  <button type="button" title="改名字" onClick={() => renameProfile(profile.id)}>
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    title="删除"
+                    disabled={draft.profiles.length <= 1}
+                    onClick={() => requestDeleteProfile(profile)}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
             ))}
             <button className="add-profile-button" onClick={addProfile}>新增 API</button>
           </div>
-          <div className="ai-profile-form">
-            <label className="settings-field">
-              <span>方案名称</span>
-              <input
-                value={activeProfile.name}
-                onChange={(event) => updateActiveProfile({ name: event.target.value })}
-                placeholder="例如 OpenRouter / 硅基流动 / 公司中转"
-              />
-            </label>
-            <label className="settings-field">
-              <span>备注</span>
-              <input
-                value={activeProfile.note}
-                onChange={(event) => updateActiveProfile({ note: event.target.value })}
-                placeholder="例如便宜、速度快、备用、专门看图"
-              />
-            </label>
-            <label className="settings-field">
-              <span>服务类型</span>
-              <select
-                value={activeProfile.provider}
-                onChange={(event) => {
-                  const provider = event.target.value;
-                  updateActiveProfile({
-                    provider,
-                    baseUrl: provider === 'runninghub' ? RUNNINGHUB_LLM_BASE_URL : activeProfile.baseUrl,
-                    model: provider === 'runninghub' && !activeProfile.model ? 'bytedance/doubao-seed-2.0-pro' : activeProfile.model,
-                  });
-                }}
-              >
-                <option value="openai-compatible">OpenAI 兼容 / 第三方聚合</option>
-                <option value="runninghub">RunningHub LLM 专用</option>
-              </select>
-            </label>
-            <label className="settings-field">
-              <span>{isRunningHub ? 'RunningHub LLM 网关' : 'API 地址'}</span>
-              <input
-                value={isRunningHub ? (activeProfile.baseUrl || RUNNINGHUB_LLM_BASE_URL) : activeProfile.baseUrl}
-                onChange={(event) => updateActiveProfile({ baseUrl: event.target.value })}
-                placeholder={isRunningHub ? RUNNINGHUB_LLM_BASE_URL : '例如 https://api.openai.com/v1 或聚合接口地址'}
-              />
-            </label>
-            <label className="settings-field">
-              <span>API Key</span>
-              <input
-                type="password"
-                value={activeProfile.apiKey}
-                onChange={(event) => updateActiveProfile({ apiKey: event.target.value })}
-                placeholder="sk-..."
-              />
-            </label>
-            {isRunningHub && (
-              <div className="provider-login-card">
-                <div>
-                  <strong>RunningHub 登录入口</strong>
-                  <span>登录 RH 后可进入用户中心，获取或管理 API Key。</span>
-                </div>
-                <button type="button" onClick={openRunningHubLogin}>
-                  <ExternalLink size={14} />
-                  打开 RH 登录
-                </button>
+          <div className="ai-profile-form" ref={aiProfileFormRef}>
+            <div className="api-settings-card">
+              <div className="section-label">
+                <strong>API 设置</strong>
+                <span>这里保存的是当前选中的 API 方案。</span>
               </div>
-            )}
-            <label className="settings-field">
-              <span>模型名称</span>
-              <input
-                value={activeProfile.model}
-                onChange={(event) => updateActiveProfile({ model: event.target.value })}
-                placeholder={isRunningHub ? '例如 bytedance/doubao-seed-2.0-pro' : '例如 gpt-4o-mini、qwen-vl-plus 等'}
-              />
-            </label>
-            <div className="model-picker">
-              <div className="model-picker-actions">
-                <button type="button" onClick={loadModels} disabled={loadingModels}>{loadingModels ? '读取中' : '获取模型'}</button>
+              <label className="settings-field">
+                <span>方案名称</span>
                 <input
-                  value={modelQuery}
-                  onChange={(event) => setModelQuery(event.target.value)}
-                  placeholder="搜索模型"
-                  disabled={!modelOptions.length}
+                  ref={nameInputRef}
+                  value={activeProfile.name}
+                  onChange={(event) => updateActiveProfile({ name: event.target.value })}
+                  placeholder="例如 OpenRouter / 硅基流动 / 公司中转"
                 />
-              </div>
-              {modelMessage && <span className="model-picker-message">{modelMessage}</span>}
-              {modelOptions.length > 0 && (
-                <div className="model-option-list">
-                  {modelOptions
-                    .filter((model) => model.id.toLowerCase().includes(modelQuery.trim().toLowerCase()))
-                    .slice(0, 80)
-                    .map((model) => (
-                      <button
-                        className={activeProfile.model === model.id ? 'active' : ''}
-                        key={model.id}
-                        type="button"
-                        title={`${model.id} · ${model.vision ? '支持看图' : '文本模型'}${model.owner ? ` · ${model.owner}` : ''}`}
-                        onClick={() => {
-                          if (!model.vision) {
-                            setError('这个模型不适合图片识别，请选择支持看图的模型。');
-                            return;
-                          }
-                          setError('');
-                          updateActiveProfile({ model: model.id });
-                        }}
-                      >
-                        {model.id}
-                      </button>
-                    ))}
+              </label>
+              <label className="settings-field">
+                <span>备注</span>
+                <input
+                  value={activeProfile.note}
+                  onChange={(event) => updateActiveProfile({ note: event.target.value })}
+                  placeholder="例如便宜、速度快、备用、专门看图"
+                />
+              </label>
+              <label className="settings-field">
+                <span>服务类型</span>
+                <select
+                  value={activeProfile.provider}
+                  onChange={(event) => {
+                    const provider = event.target.value;
+                    updateActiveProfile({
+                      provider,
+                      baseUrl: provider === 'runninghub' ? RUNNINGHUB_LLM_BASE_URL : activeProfile.baseUrl,
+                      model: provider === 'runninghub' && !activeProfile.model ? 'bytedance/doubao-seed-2.0-pro' : activeProfile.model,
+                    });
+                  }}
+                >
+                  <option value="openai-compatible">OpenAI 兼容 / 第三方聚合</option>
+                  <option value="runninghub">RunningHub LLM 专用</option>
+                </select>
+              </label>
+              <label className="settings-field">
+                <span>{isRunningHub ? 'RunningHub LLM 网关' : 'API 地址'}</span>
+                <input
+                  value={isRunningHub ? (activeProfile.baseUrl || RUNNINGHUB_LLM_BASE_URL) : activeProfile.baseUrl}
+                  onChange={(event) => updateActiveProfile({ baseUrl: event.target.value })}
+                  placeholder={isRunningHub ? RUNNINGHUB_LLM_BASE_URL : '例如 https://api.openai.com/v1 或聚合接口地址'}
+                />
+              </label>
+              <label className="settings-field">
+                <span>API Key</span>
+                <input
+                  type="password"
+                  value={activeProfile.apiKey}
+                  onChange={(event) => updateActiveProfile({ apiKey: event.target.value })}
+                  placeholder="sk-..."
+                />
+              </label>
+              {isRunningHub && (
+                <div className="provider-login-card">
+                  <div>
+                    <strong>RunningHub 登录入口</strong>
+                    <span>登录 RH 后可进入用户中心，获取或管理 API Key。</span>
+                  </div>
+                  <button type="button" onClick={openRunningHubLogin}>
+                    <ExternalLink size={14} />
+                    注册RunningHub开启Ai管理
+                  </button>
                 </div>
               )}
-            </div>
-            <button className="danger-text profile-delete" onClick={requestDeleteProfile}>删除当前方案</button>
-            <div className="settings-manage-card">
-              <div>
-                <strong>素材详情广告位</strong>
-                <span>推荐 16:5 横幅图，上传后会在素材详情上方轮播。</span>
+              <label className="settings-field">
+                <span>模型名称</span>
+                <input
+                  value={activeProfile.model}
+                  onChange={(event) => updateActiveProfile({ model: event.target.value })}
+                  placeholder={isRunningHub ? '例如 bytedance/doubao-seed-2.0-pro' : '例如 gpt-4o-mini、qwen-vl-plus 等'}
+                />
+              </label>
+              <div className="model-picker">
+                <div className="model-picker-actions">
+                  <button type="button" onClick={loadModels} disabled={loadingModels}>{loadingModels ? '读取中' : '获取模型'}</button>
+                  <input
+                    value={modelQuery}
+                    onChange={(event) => setModelQuery(event.target.value)}
+                    placeholder="搜索模型"
+                    disabled={!modelOptions.length}
+                  />
+                </div>
+                {modelMessage && <span className="model-picker-message">{modelMessage}</span>}
+                {modelOptions.length > 0 && (
+                  <div className="model-option-list">
+                    <button
+                      className="model-option-close"
+                      type="button"
+                      title="收起模型列表"
+                      onClick={() => {
+                        setModelOptions([]);
+                        setModelQuery('');
+                        setModelMessage('');
+                      }}
+                    >
+                      <X size={15} strokeWidth={2.2} />
+                    </button>
+                    <div className="model-option-items">
+                      {modelOptions
+                        .filter((model) => model.id.toLowerCase().includes(modelQuery.trim().toLowerCase()))
+                        .slice(0, 80)
+                        .map((model) => (
+                          <button
+                            className={activeProfile.model === model.id ? 'active' : ''}
+                            key={model.id}
+                            type="button"
+                            title={`${model.id} · ${model.vision ? '支持看图' : '文本模型'}${model.owner ? ` · ${model.owner}` : ''}`}
+                            onClick={() => {
+                              if (!model.vision) {
+                                setError('这个模型不适合图片识别，请选择支持看图的模型。');
+                                return;
+                              }
+                              setError('');
+                              updateActiveProfile({ model: model.id });
+                              setModelOptions([]);
+                              setModelQuery('');
+                              setModelMessage(`已选用模型：${model.id}`);
+                            }}
+                          >
+                            {model.id}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <button type="button" onClick={onOpenAdManager}>
-                <ImageIcon size={14} />
-                管理广告
-              </button>
+              <div className="api-settings-footer">
+                <span>{IS_ADMIN_BUILD ? '保存当前选中的 API 方案，不影响广告和更新地址。' : '保存当前选中的 API 设置。'}</span>
+              <button className="primary-button" onClick={save}>保存 API 设置</button>
             </div>
-            <div className="settings-manage-card update-manage-card">
-              <div>
-                <strong>软件更新</strong>
-                <span>
-                  当前版本 {formatVersionLabel(appVersion)}
-                  {updateStatus?.latestVersion ? ` · 最新版本 ${formatVersionLabel(updateStatus.latestVersion)}` : ''}
-                </span>
+          </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (updateStatus?.installerPath && ['downloaded', 'downloaded-later'].includes(updateStatus?.state)) {
-                    installDownloadedUpdate();
-                    return;
-                  }
-                  const next = { ...normalizeUpdateSettings(updateSettings), configUrl: updateConfigUrl.trim() };
-                  onSaveUpdateSettings?.(next);
-                  onCheckUpdate?.({ manual: true, configUrl: next.configUrl });
-                }}
-                disabled={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading'}
-              >
-                <RefreshCw size={14} className={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading' ? 'spin-icon' : ''} />
-                {updateStatus?.state === 'checking'
-                  ? '检查中'
-                  : updateStatus?.state === 'downloading'
-                    ? '下载中'
-                    : updateStatus?.installerPath && ['downloaded', 'downloaded-later'].includes(updateStatus?.state)
-                      ? '现在安装'
-                      : '检查更新'}
-              </button>
-            </div>
-            <label className="settings-field update-config-field">
-              <span>update.json 地址</span>
-              <input
-                value={updateConfigUrl}
-                onChange={(event) => setUpdateConfigUrl(event.target.value)}
-                onBlur={() => onSaveUpdateSettings?.({ ...normalizeUpdateSettings(updateSettings), configUrl: updateConfigUrl.trim() })}
-                placeholder="例如 https://你的域名/update.json"
-              />
-            </label>
+              </div>
+            )}
+            {IS_ADMIN_BUILD && activeSettingsPage === 'admin' && (
+              !showAdminSiteSettings ? (
+                <div className="admin-site-toggle">
+                  <div>
+                    <strong>广告与更新（管理员）</strong>
+                    <span>普通用户默认不显示。点开后才能设置 ads.json 和 update.json。</span>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setShowAdminSiteSettings(true)}>
+                    展开管理员设置
+                  </button>
+                </div>
+              ) : (
+                <div className="site-settings-card">
+                  <div className="site-settings-head">
+                    <div>
+                      <strong>广告与更新（管理员）</strong>
+                      <span>广告配置在“管理广告”里保存；update.json 地址只需要在这里保存一次。</span>
+                    </div>
+                    <div className="site-settings-head-actions">
+                      <button type="button" className="secondary-button" onClick={() => setShowAdminSiteSettings(false)}>
+                        收起管理员设置
+                      </button>
+                      <button type="button" onClick={saveSiteConfig} className="secondary-button">
+                        保存广告/更新
+                      </button>
+                    </div>
+                  </div>
+                  <div className="site-settings-grid">
+                    <label className="settings-field compact-field">
+                      <span>update.json 地址</span>
+                      <input
+                        value={updateConfigUrl}
+                        onChange={(event) => {
+                          setUpdateConfigUrl(event.target.value);
+                          setSiteSaved(false);
+                        }}
+                        placeholder="例如 https://你的域名/update.json"
+                      />
+                    </label>
+                    <div className="site-settings-actions">
+                      <div className="site-settings-summary">
+                        <strong>素材详情广告位</strong>
+                        <span>广告图片和跳转链接单独在广告管理里维护。</span>
+                      </div>
+                      <button type="button" className="secondary-button" onClick={onOpenAdManager}>
+                        <ImageIcon size={14} />
+                        管理广告
+                      </button>
+                    </div>
+                  </div>
+                  <div className="signed-update-builder">
+                    <div className="section-label">
+                      <strong>生成 update.json（带签名）</strong>
+                      <span>安装包仍然上传到 GitHub Release，这里只生成给 GitHub Pages 使用的更新配置文件。</span>
+                    </div>
+                    <div className="signed-update-grid">
+                      <label className="settings-field compact-field">
+                        <span>新版版本号</span>
+                        <input
+                          value={updateDraft.version}
+                          onChange={(event) => setUpdateDraft((current) => ({ ...current, version: event.target.value }))}
+                          placeholder="例如 1.0.3"
+                        />
+                      </label>
+                      <label className="settings-field compact-field">
+                        <span>安装包下载链接</span>
+                        <input
+                          value={updateDraft.installerUrl}
+                          onChange={(event) => setUpdateDraft((current) => ({ ...current, installerUrl: event.target.value }))}
+                          placeholder="GitHub Release 里的 exe 下载链接"
+                        />
+                      </label>
+                      <label className="settings-field compact-field">
+                        <span>安装包文件名</span>
+                        <input
+                          value={updateDraft.fileName}
+                          onChange={(event) => setUpdateDraft((current) => ({ ...current, fileName: event.target.value }))}
+                          placeholder="例如 Cyrus-Ai-Asset-Manager-User-v1.0.3.exe"
+                        />
+                      </label>
+                      <label className="settings-field compact-field">
+                        <span>SHA256 校验值</span>
+                        <input
+                          value={updateDraft.sha256}
+                          onChange={(event) => setUpdateDraft((current) => ({ ...current, sha256: event.target.value }))}
+                          placeholder="选择本地安装包后自动填写"
+                        />
+                      </label>
+                      <label className="settings-field compact-field wide">
+                        <span>更新说明</span>
+                        <textarea
+                          value={updateDraft.notes}
+                          onChange={(event) => setUpdateDraft((current) => ({ ...current, notes: event.target.value }))}
+                          placeholder="一行一条，例如：修复模型选择列表体验"
+                        />
+                      </label>
+                    </div>
+                    <div className="signed-update-actions">
+                      <button type="button" className="secondary-button" onClick={chooseUpdateInstaller}>
+                        选择安装包并计算校验
+                      </button>
+                      <button type="button" className="primary-button" onClick={exportSignedUpdateConfig}>
+                        导出带签名 update.json
+                      </button>
+                    </div>
+                  </div>
+                  {siteSaved && <div className="settings-success small-success">广告和更新地址已保存。</div>}
+                  <div className="site-settings-footer">
+                    <div>
+                      <strong>软件更新</strong>
+                      <span>
+                        当前版本 {formatVersionLabel(appVersion)}
+                        {updateStatus?.latestVersion ? ` · 最新版本 ${formatVersionLabel(updateStatus.latestVersion)}` : ''}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={checkOrInstallUpdate}
+                      disabled={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading'}
+                    >
+                      <RefreshCw size={14} className={updateStatus?.state === 'checking' || updateStatus?.state === 'downloading' ? 'spin-icon' : ''} />
+                      {updateStatus?.state === 'checking'
+                        ? '检查中'
+                        : updateStatus?.state === 'downloading'
+                          ? '下载中'
+                          : updateStatus?.installerPath && ['downloaded', 'downloaded-later'].includes(updateStatus?.state)
+                            ? '现在安装'
+                            : '检查更新'}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
           </div>
         </div>
-        <div className="settings-note">
-          {isRunningHub
-            ? 'RunningHub LLM 模式会自动使用 llm.runninghub.cn 的 OpenAI 兼容网关。连接测试会读取模型列表并发送一次短文本；生成标签或反推时才会上传所选图片。'
-            : 'API Key 只保存在当前本地素材库配置里。连接测试只发送短文本；生成标签时才会上传所选图片给你配置的 AI 服务。'}
-        </div>
+        {activeSettingsPage === 'ai' && (
+          <div className="settings-note">
+            {isRunningHub
+              ? 'RunningHub LLM 模式会自动使用 llm.runninghub.cn 的 OpenAI 兼容网关。连接测试会读取模型列表并发送一次短文本；生成标签或反推时才会上传所选图片。'
+              : 'API Key 只保存在当前本地素材库配置里。连接测试只发送短文本；生成标签时才会上传所选图片给你配置的 AI 服务。'}
+          </div>
+        )}
         {saved && <div className="settings-success">保存成功，当前选中的 API 方案已生效。</div>}
         {error && <p className="form-error">{error}</p>}
         <div className="dialog-actions">
           <button onClick={onCancel}>关闭</button>
-          <button onClick={test} disabled={testing}>{testing ? '测试中' : '测试连接'}</button>
-          <button className="primary-button" onClick={save}>保存</button>
+          {activeSettingsPage === 'ai' && <button onClick={test} disabled={testing}>{testing ? '测试中' : '测试连接'}</button>}
         </div>
       </section>
     </div>
@@ -3380,15 +4041,15 @@ function UpdateToast({ status, hidden, onClose }) {
   if (!['checking', 'downloading', 'failed'].includes(status.state)) return null;
   const isFailed = status.state === 'failed';
   const title = isFailed
-    ? (status.retryExhausted ? '更新下载仍未成功' : '更新下载失败')
+    ? (status.retryExhausted ? '更新仍失败' : '更新失败')
     : status.state === 'checking'
-      ? '正在检查更新'
-      : `发现新版本 ${status.latestVersion || ''}`;
+      ? '检查更新中'
+      : `新版本 ${status.latestVersion || ''}`;
   const subtitle = isFailed
-    ? (status.retryExhausted ? '将在下次打开软件时再次尝试' : '10 分钟后自动重试')
+    ? (status.retryExhausted ? '下次启动再试' : '10 分钟后重试')
     : status.state === 'checking'
-      ? '正在读取 update.json'
-      : `正在下载更新 ${Math.max(0, Math.min(100, Math.round(status.percent || 0)))}%`;
+      ? '正在读取配置'
+      : `下载中 ${Math.max(0, Math.min(100, Math.round(status.percent || 0)))}%`;
   return (
     <div className={`update-toast ${isFailed ? 'has-failed' : ''}`}>
       <div>
@@ -3467,6 +4128,7 @@ function App() {
   const [rhGuideOpen, setRhGuideOpen] = useState(false);
   const [adDialogOpen, setAdDialogOpen] = useState(false);
   const [exportDataDialogOpen, setExportDataDialogOpen] = useState(false);
+  const [librarySwitchPending, setLibrarySwitchPending] = useState(false);
   const [aiTesting, setAiTesting] = useState(false);
   const [aiModelsLoading, setAiModelsLoading] = useState(false);
   const [aiBusyAssetId, setAiBusyAssetId] = useState(null);
@@ -3508,6 +4170,24 @@ function App() {
       }));
     });
   }, []);
+
+  useEffect(() => {
+    if (updateRetryTimerRef.current) {
+      clearTimeout(updateRetryTimerRef.current);
+      updateRetryTimerRef.current = null;
+    }
+    if (updateStatus.state !== 'failed' || updateToastHidden) return undefined;
+    updateRetryTimerRef.current = setTimeout(() => {
+      setUpdateToastHidden(true);
+      updateRetryTimerRef.current = null;
+    }, 3000);
+    return () => {
+      if (updateRetryTimerRef.current) {
+        clearTimeout(updateRetryTimerRef.current);
+        updateRetryTimerRef.current = null;
+      }
+    };
+  }, [updateStatus.state, updateToastHidden]);
 
   useEffect(() => () => {
     if (updateRetryTimerRef.current) clearTimeout(updateRetryTimerRef.current);
@@ -3692,12 +4372,52 @@ function App() {
     return () => window.removeEventListener('pointerdown', handlePointerDown);
   }, [contextMenu, folderContextMenu]);
 
-  async function chooseRoot() {
-    const result = await window.assetVault.chooseRoot();
+  async function applyLibraryRootResult(result, options = {}) {
     if (!result) return;
+    if (result.error) return result;
     setRootPath(result.rootPath);
     setDatabase(normalizeDatabase(result.database));
+    setSelectedFolderId('all');
+    setSelectedAssetId(null);
+    setSelectedIds([]);
+    setPreviewId(null);
     localStorage.setItem('assetVaultRoot', result.rootPath);
+    localStorage.setItem('assetVaultSelectedFolder', 'all');
+    if (options.notify) {
+      setNotice({ type: 'success', message: '素材库已切换。' });
+    }
+    return result;
+  }
+
+  async function chooseRoot(options = {}) {
+    const result = await window.assetVault.chooseRoot();
+    return applyLibraryRootResult(result, options);
+  }
+
+  async function selectExistingRoot(options = {}) {
+    const result = await window.assetVault.selectExistingRoot?.();
+    return applyLibraryRootResult(result, options);
+  }
+
+  async function createNewRoot(options = {}) {
+    const result = await window.assetVault.createRoot?.();
+    return applyLibraryRootResult(result, options);
+  }
+
+  async function openCurrentLibraryRoot() {
+    if (!rootPath) return;
+    try {
+      const errorMessage = await window.assetVault.openPath?.(rootPath);
+      if (errorMessage) setNotice({ type: 'error', message: `打开失败：${errorMessage}` });
+    } catch (error) {
+      setNotice({ type: 'error', message: `打开失败：${error?.message || '请检查素材库路径是否存在。'}` });
+    }
+  }
+
+  async function confirmSwitchLibrary() {
+    setLibrarySwitchPending(false);
+    const result = await selectExistingRoot({ notify: true });
+    if (result?.error) setNotice({ type: 'error', message: result.message || '没有找到可用的素材库。' });
   }
 
   function updateDatabase(recipe) {
@@ -4227,6 +4947,10 @@ function App() {
     const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`, { cache: 'no-store' });
     if (!response.ok) throw new Error(`读取失败：HTTP ${response.status}`);
     const payload = await response.json();
+    const signatureCheck = await verifySignedConfig(payload);
+    if (!signatureCheck.ok) {
+      throw new Error(`广告配置签名无效：${signatureCheck.reason || '请确认 ads.json 是由管理版生成的。'}`);
+    }
     const config = normalizeRemoteAdConfig(payload, response.url || url);
     const enabledCount = config.ads.filter((ad) => ad.enabled !== false).length;
     updateDatabase((next) => {
@@ -4247,15 +4971,18 @@ function App() {
   }
 
   function saveAdSettings(items, remoteConfig = getRemoteAdSettings()) {
+    const normalizedItems = normalizeAdSettings(items);
     const normalizedRemote = normalizeRemoteAdSettings(remoteConfig);
     updateDatabase((next) => {
       next.settings = {
         ...(next.settings || {}),
-        ads: normalizeAdSettings(items),
+        ads: normalizedItems,
         remoteAds: {
           ...normalizeRemoteAdSettings(next.settings?.remoteAds || {}),
           ...normalizedRemote,
           configUrl: normalizedRemote.configUrl,
+          cachedAds: normalizedItems,
+          lastFetchedAt: new Date().toISOString(),
         },
       };
     });
@@ -4275,7 +5002,7 @@ function App() {
   async function runUpdateCheck({ manual = false, configUrl = '', retry = false } = {}) {
     const url = String(configUrl || getUpdateSettings().configUrl || '').trim();
     if (!url) {
-      if (manual) setNotice({ type: 'info', message: '请先在软件更新里填写 update.json 地址。' });
+      if (manual) setNotice({ type: 'info', message: '请先配置软件更新地址。' });
       return null;
     }
     if (['checking', 'downloading'].includes(updateStatus.state)) return null;
@@ -4363,8 +5090,19 @@ function App() {
 
   async function exportAdPackage(items) {
     if (!rootPath) throw new Error('请先选择素材库位置。');
-    const result = await window.assetVault.exportAdPackage?.(rootPath, normalizeAdSettings(items));
+    if (!hasConfigSigningKey()) throw new Error('当前版本缺少配置签名钥匙，请使用管理版导出广告包。');
+    const result = await window.assetVault.exportAdPackage?.(rootPath, normalizeAdSettings(items), CONFIG_PRIVATE_KEY_BASE64);
     if (result?.path) setNotice({ type: 'success', message: `广告包已导出：${result.count || 0} 条广告。` });
+    return result;
+  }
+
+  async function chooseUpdateInstaller() {
+    return window.assetVault.chooseUpdateInstaller?.();
+  }
+
+  async function exportUpdateConfig(config, privateKeyBase64) {
+    const result = await window.assetVault.exportUpdateConfig?.(config, privateKeyBase64);
+    if (result?.path) setNotice({ type: 'success', message: `带签名的 update.json 已导出：${result.path}` });
     return result;
   }
 
@@ -5071,7 +5809,14 @@ function App() {
     setPreviewId(nextAsset.id);
   }
 
-  if (!rootPath || !database) return <Onboarding onChoose={chooseRoot} />;
+  if (!rootPath || !database) {
+    return (
+      <Onboarding
+        onSelectExisting={selectExistingRoot}
+        onCreateNew={createNewRoot}
+      />
+    );
+  }
 
   return (
     <div className="app-window">
@@ -5117,6 +5862,8 @@ function App() {
           }}
           onBlankPointerDown={clearSelection}
           stats={stats}
+          thumbnailSize={thumbnailSize}
+          onThumbnailSize={setThumbnailSize}
         />
 
         <main className={`main-workspace ${previewAsset ? 'previewing' : ''}`} onPointerDownCapture={clearSelectionFromBlankPointer}>
@@ -5198,8 +5945,6 @@ function App() {
           )}
         </main>
 
-        <StatusBar count={filteredAssets.length} selectedCount={selectedIds.length > 1 ? selectedIds.length : 0} thumbnailSize={thumbnailSize} onThumbnailSize={setThumbnailSize} />
-
         <DetailsPanel
           asset={selectedAsset}
           aiEnabled={!!(getAiSettings().enabled && getAiSettings().baseUrl && getAiSettings().apiKey && getAiSettings().model)}
@@ -5248,6 +5993,11 @@ function App() {
       <DuplicateImportDialog duplicates={duplicateImportItems} onImport={() => setDuplicateImportItems([])} onCancel={removeDuplicateImportCopies} />
       <AiSettingsDialog
         open={aiDialogOpen}
+        rootPath={rootPath}
+        libraryStats={{
+          assets: (database.assets || []).filter((asset) => !asset.deletedAt).length,
+          folders: database.folders?.length || 0,
+        }}
         settings={getAiSettings()}
         testing={aiTesting}
         loadingModels={aiModelsLoading}
@@ -5258,26 +6008,45 @@ function App() {
         onSave={saveAiSettings}
         onTest={testAiSettings}
         onListModels={listAiModels}
+        onOpenLibraryRoot={openCurrentLibraryRoot}
+        onRequestSwitchLibrary={() => setLibrarySwitchPending(true)}
         onOpenExternal={(url) => window.assetVault.openExternal?.(url)}
-        onOpenAdManager={() => setAdDialogOpen(true)}
+        onCopyText={copyTextToClipboard}
+        onOpenAdManager={IS_ADMIN_BUILD ? () => setAdDialogOpen(true) : undefined}
         onSaveUpdateSettings={saveUpdateSettings}
         onCheckUpdate={runUpdateCheck}
+        onInstall={installDownloadedUpdate}
+        onChooseUpdateInstaller={chooseUpdateInstaller}
+        onExportUpdateConfig={exportUpdateConfig}
       />
+      {librarySwitchPending && (
+        <ConfirmActionDialog
+          title="切换素材库"
+          message="切换素材库只会让软件打开另一个本地素材库，不会移动、删除或覆盖当前素材库里的文件。"
+          items={[rootPath || '当前素材库']}
+          confirmText="选择素材库"
+          variant="normal"
+          onCancel={() => setLibrarySwitchPending(false)}
+          onConfirm={confirmSwitchLibrary}
+        />
+      )}
       <RunningHubGuideDialog
         open={rhGuideOpen}
         onCancel={() => setRhGuideOpen(false)}
         onOpenExternal={(url) => window.assetVault.openExternal?.(url)}
       />
-      <AdManagerDialog
-        open={adDialogOpen}
-        ads={getAdSettings()}
-        remoteConfig={getRemoteAdSettings()}
-        onCancel={() => setAdDialogOpen(false)}
-        onSave={saveAdSettings}
-        onChooseImage={chooseAdImage}
-        onExportPackage={exportAdPackage}
-        onTestRemote={loadRemoteAdConfig}
-      />
+      {IS_ADMIN_BUILD && (
+        <AdManagerDialog
+          open={adDialogOpen}
+          ads={getAdSettings()}
+          remoteConfig={getRemoteAdSettings()}
+          onCancel={() => setAdDialogOpen(false)}
+          onSave={saveAdSettings}
+          onChooseImage={chooseAdImage}
+          onExportPackage={exportAdPackage}
+          onTestRemote={loadRemoteAdConfig}
+        />
+      )}
       <FolderNameDialog
         mode={folderDialog?.mode}
         folder={folderDialogFolder}

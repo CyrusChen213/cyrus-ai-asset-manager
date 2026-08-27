@@ -1,6 +1,6 @@
 {
   "name": "ai-asset-vault",
-  "version": "1.0.0",
+  "version": "1.0.8",
   "private": true,
   "description": "Windows local asset manager for images, animations, videos, tags, colors, and prompts.",
   "main": "electron/main.js",
@@ -8,19 +8,25 @@
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
     "build": "vite build",
+    "build:user": "vite build --mode user",
+    "build:admin": "vite build --mode admin",
+    "dist:user": "npm run build:user && electron-builder --config electron-builder.user.yml --win",
+    "dist:admin": "npm run build:admin && electron-builder --config electron-builder.admin.yml --win",
+    "dist:all": "npm run dist:user && npm run dist:admin",
     "start": "electron ."
   },
   "dependencies": {
+    "ffmpeg-static": "^5.3.0"
+  },
+  "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",
     "concurrently": "^9.2.1",
     "electron": "^39.2.7",
+    "electron-builder": "^26.15.3",
     "lucide-react": "^0.468.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "vite": "^7.3.0",
     "wait-on": "^9.0.3"
-  },
-  "devDependencies": {
-    "ffmpeg-static": "^5.3.0"
   }
 }

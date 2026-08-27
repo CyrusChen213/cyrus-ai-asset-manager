@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cyrus Ai素材管理 - 广告与更新上传教程</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1217;
+        --panel: #161a22;
+        --panel-2: #1a1f28;
+        --text: #e6ebf2;
+        --muted: #9aa4b2;
+        --line: #2a313c;
+        --accent: #7fd26b;
+        --accent-2: #4f9d48;
+        --code: #0c0f14;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #eef2f6;
+          --panel: #ffffff;
+          --panel-2: #f4f7fa;
+          --text: #1d2733;
+          --muted: #5f6b77;
+          --line: #d8e0e8;
+          --accent: #3f8f3d;
+          --accent-2: #2f6e2d;
+          --code: #f3f6f9;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      }
+      main {
+        width: min(1100px, calc(100vw - 32px));
+        margin: 28px auto 40px;
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 14px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+      .lead {
+        margin: 8px 0 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-content: flex-start;
+      }
+      .links a,
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 36px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-2);
+        color: var(--text);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .links a.primary,
+      .button.primary {
+        border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+        background: color-mix(in srgb, var(--accent) 10%, var(--panel-2));
+        color: var(--text);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .card {
+        grid-column: span 6;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel-2);
+      }
+      .card.full { grid-column: 1 / -1; }
+      .card.third { grid-column: span 4; }
+      .card h2,
+      .card h3 {
+        margin: 0 0 8px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+      .tree,
+      pre {
+        overflow: auto;
+        margin: 12px 0 0;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--code);
+        color: var(--text);
+        white-space: pre-wrap;
+        line-height: 1.6;
+      }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .step {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--panel) 84%, var(--accent));
+      }
+      .step strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      .step span {
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 13px;
+      }
+      ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.75;
+      }
+      li + li { margin-top: 4px; }
+      code {
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--line) 48%, transparent);
+      }
+      .notice {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+        color: var(--text);
+      }
+      .caption {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .snapshot {
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--panel) 76%, transparent);
+      }
+      .snapshot strong { font-size: 13px; }
+      .snapshot span { color: var(--muted); font-size: 12px; line-height: 1.6; }
+      @media (max-width: 900px) {
+        .card, .card.third { grid-column: 1 / -1; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>广告与更新上传教程</h1>
+          <p class="lead">这个页面只讲两件事：广告传哪里，更新传哪里。你以后照着这份流程改 <code>docs/</code> 里面的文件就行。</p>
+        </div>
+        <div class="links">
+          <a class="primary" href="./index.html">返回网页首页</a>
+          <a href="./ads.json">打开 ads.json</a>
+          <a href="./update.json">打开 update.json</a>
+        </div>
+      </header>
+
+      <div class="grid">
+        <section class="card full">
+          <h2>一、你到底要上传到哪里</h2>
+          <p>这个仓库的网页内容是从 <code>docs/</code> 目录发布的，所以你只要把内容放到这里：</p>
+          <div class="tree">docs/
+├── ads.json          广告列表，软件读取这个
+├── update.json       更新列表，软件读取这个
+├── ads/              广告图片放这里
+└── download/         更新安装包放这里</div>
+          <div class="notice">最重要的是：<strong>图片和安装包都先放在 <code>docs/</code> 里，再把对应链接写进 json</strong>。软件里填的是 json 地址，不是图片文件地址。</div>
+        </section>
+
+        <section class="card full">
+          <h2>二、广告配置生成器怎么用</h2>
+          <p>这一步就是照着你软件里的窗口来。顺序别乱，先做广告内容，再导出，再上传，最后回到软件里填网址。</p>
+          <div class="steps">
+            <div class="step">
+              <strong>1. 打开广告配置生成器</strong>
+              <span>在软件里点“管理广告”，进入这个窗口后，先看左上角的广告列表区。</span>
+            </div>
+            <div class="step">
+              <strong>2. 点击“添加图片广告”</strong>
+              <span>选一张广告图，再填“广告名称”和“点击跳转网址”。广告名称只是方便你自己管理，用户一般看不到。</span>
+            </div>
+            <div class="step">
+              <strong>3. 需要多条广告就重复添加</strong>
+              <span>每一条广告都可以单独启用或删除。你想放几条就加几条，做完一条就继续下一条。</span>
+            </div>
+            <div class="step">
+              <strong>4. 点“导出广告包”</strong>
+              <span>软件会帮你打包生成带签名的 <code>ads.json</code> 和 <code>ads</code> 图片文件夹，后面上传到网页目录里。</span>
+            </div>
+            <div class="step">
+              <strong>5. 把导出的文件传到网页目录</strong>
+              <span>把导出的 <code>ads.json</code> 和 <code>ads</code> 文件夹，上传到 GitHub 仓库的 <code>docs/</code> 目录里。</span>
+            </div>
+            <div class="step">
+              <strong>6. 回到软件里粘贴网址</strong>
+              <span>把上传后的 <code>ads.json</code> 地址填到“云端 ads.json 地址”里，然后点“测试读取”。</span>
+            </div>
+            <div class="step">
+              <strong>7. 测试成功后保存</strong>
+              <span>看到测试成功，再点保存。这样广告以后就会从网页地址里读取，不用每次重新填。</span>
+            </div>
+          </div>
+          <pre>{
+  "version": 1,
+  "updatedAt": "2026-08-22T12:00:00.000Z",
+  "ads": [
+    {
+      "id": "ad-1",
+      "title": "示例广告",
+      "imagePath": "ads/ad-01.png",
+      "url": "https://example.com",
+      "enabled": true
+    }
+  ]
+}</pre>
+          <p class="caption">如果图片和 ads.json 在同一个网页目录里，<code>imagePath</code> 用相对路径最稳。导出的 ads.json 已经带签名，不要手动改里面的内容，改了签名会失效。</p>
+        </section>
+
+        <section class="card">
+          <h2>三、更新怎么上传</h2>
+          <div class="steps">
+            <div class="step">
+              <strong>1. 上传安装包</strong>
+              <span>把新版本安装包放到 <code>docs/download/</code>，例如 <code>AI素材库-v1.0.1.exe</code>。</span>
+            </div>
+            <div class="step">
+              <strong>2. 用管理版导出 update.json</strong>
+              <span>在管理设置里填写版本号、安装包下载链接，选择本地安装包计算校验值，然后导出带签名的 update.json。</span>
+            </div>
+            <div class="step">
+              <strong>3. 软件里粘贴</strong>
+              <span>更新地址填 <code>https://你的用户名.github.io/仓库名/update.json</code>。</span>
+            </div>
+            <div class="step">
+              <strong>4. 发布后等待生效</strong>
+              <span>网页发布通常几分钟内刷新完成，旧版本用户下次检查更新就会看到新版本。</span>
+            </div>
+          </div>
+          <pre>{
+  "version": "1.0.1",
+  "title": "发现新版本",
+  "notes": ["修复若干问题", "优化启动速度"],
+  "installerUrl": "https://你的用户名.github.io/仓库名/download/AI素材库-v1.0.1.exe",
+  "fileName": "AI素材库-v1.0.1.exe",
+  "sha256": "",
+  "force": false
+}</pre>
+          <p class="caption">新版软件会检查 update.json 的签名。以后请用管理版导出 update.json，不要手动改签名字段。</p>
+        </section>
+
+        <section class="card full">
+          <h2>四、在软件里哪里填</h2>
+          <div class="steps">
+            <div class="step">
+              <strong>1. 打开软件的设置</strong>
+              <span>点软件里的“AI 设置”，会看到上半部分是 API 设置，下半部分是广告与更新。</span>
+            </div>
+            <div class="step">
+              <strong>2. 上半部分填 API</strong>
+              <span>这里填的是 API 地址、API Key、模型名称。填好后点“保存 API 设置”。</span>
+            </div>
+            <div class="step">
+              <strong>3. 下半部分填更新地址</strong>
+              <span>把 <code>update.json</code> 的网址贴到“update.json 地址”里，然后点“保存广告/更新”。</span>
+            </div>
+            <div class="step">
+              <strong>4. 广告单独管理</strong>
+              <span>点“管理广告”，进去后按前面那一套：添加广告图片、导出广告包、上传到网页、填写网址、测试、保存。</span>
+            </div>
+            <div class="step">
+              <strong>5. 默认收起管理员区</strong>
+              <span>普通用户打开软件时默认看不到广告和更新地址，只有点“展开管理员设置”才会出现。</span>
+            </div>
+          </div>
+          <div class="notice" style="margin-top:12px;">
+            你以后记住一句话就行：<strong>网页里改的是文件，软件里填的是地址</strong>。<br />
+            上面那块是 API，下面那块才是广告和更新，两个保存按钮各管各的。
+          </div>
+        </section>
+
+        <section class="card full">
+          <h2>五、网页版仓库具体怎么点</h2>
+          <div class="steps">
+            <div class="step">
+              <strong>步骤 1：仓库首页</strong>
+              <span>打开你的仓库，看到文件列表后，右上方通常有“添加文件”相关按钮。</span>
+            </div>
+            <div class="step">
+              <strong>步骤 2：上传文件页</strong>
+              <span>点“上传文件”后，把 <code>ads.json</code>、<code>update.json</code>、图片或安装包拖进去。</span>
+            </div>
+            <div class="step">
+              <strong>步骤 3：提交按钮</strong>
+              <span>页面下方点“提交更改”，提交后网页会重新发布。</span>
+            </div>
+          </div>
+          <div class="snapshot" style="margin-top:14px;">
+            <strong>你可以按这个顺序操作</strong>
+            <span>打开仓库 -> 上传文件 -> 修改 json -> 提交 -> 等网页刷新 -> 回软件里点“测试广告 / 检查更新”。</span>
+          </div>
+        </section>
+
+        <section class="card third">
+          <h3>六、以后换广告要不要删旧图</h3>
+          <p>不一定要删。只要 <code>ads.json</code> 不再引用旧图，旧图放着也不会影响新广告。等你确认不用了，再清理旧文件也行。</p>
+        </section>
+        <section class="card third">
+          <h3>七、以后换更新包要不要删旧包</h3>
+          <p>也不一定。只要 <code>update.json</code> 指向新的安装包，旧 exe 可以先保留，等你想整理仓库再删。</p>
+        </section>
+        <section class="card third">
+          <h3>八、软件里填什么</h3>
+          <p>只填两个地址：<code>ads.json</code> 和 <code>update.json</code>。这两个地址保存一次就够了，不用每次改广告都重新填。</p>
+        </section>
+
+        <section class="card full">
+          <h2>九、最常见的 3 个问题</h2>
+          <ul>
+            <li><strong>问题：</strong> 图片上传了，软件不显示。<br /><strong>答：</strong> 检查图片是不是还写着本地路径，应该写成网页发布后能访问的相对路径或完整网址。</li>
+            <li><strong>问题：</strong> 更新包上传了，软件还是老版本。<br /><strong>答：</strong> 检查 <code>update.json</code> 里的版本号是不是比当前软件版本大。</li>
+            <li><strong>问题：</strong> 每次上传都很麻烦。<br /><strong>答：</strong> 以后只更新 <code>ads.json</code>、<code>update.json</code> 和对应新文件，不需要重建整个仓库。</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

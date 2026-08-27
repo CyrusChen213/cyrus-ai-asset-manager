@@ -1,0 +1,30 @@
+appId: com.cyrus.ai-asset-manager.user
+productName: Cyrus Ai素材管理 用户版
+copyright: Copyright © 2026 Cyrus
+asar: true
+electronDist: node_modules/electron/dist
+asarUnpack:
+  - node_modules/ffmpeg-static/**
+  - extension/**
+directories:
+  output: release/user-final
+files:
+  - dist/**
+  - electron/**
+  - extension/**
+  - package.json
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName} Setup v${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Cyrus Ai素材管理 用户版
+  uninstallDisplayName: Cyrus Ai素材管理 用户版

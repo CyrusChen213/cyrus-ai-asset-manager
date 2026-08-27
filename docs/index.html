@@ -60,6 +60,28 @@
         text-decoration: none;
         word-break: break-all;
       }
+      .card ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+      .card li + li { margin-top: 4px; }
+      .wide {
+        grid-column: 1 / -1;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+      }
       .hint { margin-top: 16px; font-size: 12px; }
       code { padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--line) 55%, transparent); }
     </style>
@@ -67,24 +89,44 @@
   <body>
     <main>
       <h1>Cyrus Ai素材管理</h1>
-      <p>这是这个项目的 GitHub Pages 站点，主要用来放广告配置和软件更新配置。</p>
+      <p>这是这个项目的网页发布地址，主要用来放广告配置和软件更新配置。</p>
       <div class="grid">
         <div class="card">
           <strong>广告配置</strong>
           <a href="./ads.json">ads.json</a>
-          <p>在这里填写广告图片和跳转链接。</p>
+          <p>在这里填写广告图片和跳转链接，软件里对应“AI设置”下面的“广告与更新”里的“管理广告”。</p>
+          <ul>
+            <li>广告图片放在 <code>docs/ads/</code></li>
+            <li>广告列表写进 <code>ads.json</code></li>
+            <li>软件里填这个 <code>ads.json</code> 的网址</li>
+          </ul>
         </div>
         <div class="card">
           <strong>更新配置</strong>
           <a href="./update.json">update.json</a>
-          <p>在这里填写新版本号、安装包地址和校验值。</p>
+          <p>在这里填写新版本号、安装包地址和校验值，软件里对应“AI设置”下面的“广告与更新”里的“update.json 地址”。</p>
+          <ul>
+            <li>安装包放在 <code>docs/download/</code></li>
+            <li>更新信息写进 <code>update.json</code></li>
+            <li>软件里填这个 <code>update.json</code> 的网址</li>
+          </ul>
         </div>
         <div class="card">
-          <strong>素材说明</strong>
-          <p>广告图可以放在 <code>docs/ads/</code>，安装包可以放在 <code>docs/download/</code>。</p>
+          <strong>上传教程</strong>
+          <p>我已经把完整的图文步骤整理好了，适合直接照着传。</p>
+          <a href="./upload-guide.html">打开详细教程</a>
+          <div class="pill">建议先看这个</div>
+        </div>
+        <div class="card wide">
+          <strong>最重要的两条路径</strong>
+          <p>广告和更新都上传到这个仓库的 <code>docs/</code> 目录里。页面发布后，软件只需要填下面两个地址：</p>
+          <ul>
+            <li><code>https://cyruschen213.github.io/cyrus-ai-asset-manager/ads.json</code></li>
+            <li><code>https://cyruschen213.github.io/cyrus-ai-asset-manager/update.json</code></li>
+          </ul>
         </div>
       </div>
-      <p class="hint">后续软件里只要填这个 Pages 地址下面的 <code>ads.json</code> 和 <code>update.json</code> 即可。</p>
+      <p class="hint">后续软件里只要填这个网页地址下面的 <code>ads.json</code> 和 <code>update.json</code> 即可。</p>
     </main>
   </body>
 </html>

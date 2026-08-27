@@ -9,6 +9,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { spawn } from 'node:child_process';
 import ffmpegPath from 'ffmpeg-static';
+import { signConfigPayload, verifySignedConfig } from './configSignature.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -25,6 +26,8 @@ const trashRetentionMs = 30 * 24 * 60 * 60 * 1000;
 const dragFallbackIconDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAACXBIWXMAAAsTAAALEwEAmpwYAAABuUlEQVR4nO2aPU7DQBCFXxYkJHQUNBQ0FNwAcggUFBwCS0BBS0FBR0FBQUVNR0FBQ08AZ+0YJ4l9z3jG3nF2ySopVnZm5v3Z2Z0xAAAAAAAAAAAAAAAAgEZm5z5w4n3nJd/smV3sBXiBN/AJLsAR2JHd8wW4gTfwCi7AIdh6GcAdOAHv4B1cxptgG7wLE0gaYI+RHR6BJeALPIFbcAFuYV4LrIF34BpcgltwAR7BJVzAOrkxSgF7juzIGcJjYALv4GcJfYAJ8jJDnP0rbBx4BM/BY3oMcIA1fI2QJ3/NpJ5LgucgA/wJkKe/DiMHAHf4Db8rL+GJXADJtAB14VgOc+TWGgD+MBrmNcAA/gNR6EJ3IALWADnKgQ1wDx/gCG7BFVTAEPwLr+FHxgg4AadqFDXAQL2AF7MNv0NHvhg3wBl7BtehvsQJWwAqYxgY4J4DvL1OCT+ADnIAPsC0bcgJH4FfYkJs/Mu3BRTgCt+ARvIovwN3QxpWwhq8B2cAyQhxlwBf4Gm/NhLD9PKOBD7ALj+ILcDt0cYV9YB1/gTfwCr4Ad2T0PAGu4A28ggtwCHZvA/gAgHkcgGd3N2Ccmv4/vZR7bT/8aQEAAAAAAAAAAAAAAEDP8gEw5nsn+G+R0gAAAABJRU5ErkJggg==';
 const updateRequestTimeoutMs = 30000;
 const updateDownloadTimeoutMs = 120000;
+const defaultRemoteAdsUrl = 'https://cyruschen213.github.io/cyrus-ai-asset-manager/ads.json';
+const defaultUpdateConfigUrl = 'https://cyruschen213.github.io/cyrus-ai-asset-manager/update.json';
 
 let mainWindow;
 let activeRootPath = '';
@@ -32,6 +35,65 @@ let extensionServer;
 const extensionServerPort = 17321;
 const aiRequestControllers = new Map();
 let activeDownload = null;
+
+function getAppVariant() {
+  const explicit = String(process.env.CYRUS_APP_VARIANT || '').toLowerCase();
+  if (explicit === 'user' || explicit === 'admin') return explicit;
+  const appName = app.getName();
+  if (appName.includes('用户版')) return 'user';
+  return 'admin';
+}
+
+function getProductTitle() {
+  return getAppVariant() === 'user' ? 'Cyrus Ai素材管理 用户版' : 'Cyrus Ai素材管理 管理版';
+}
+
+function getExtensionFolderPath() {
+  if (isDev) return path.resolve(__dirname, '..', 'extension');
+  return path.join(process.resourcesPath, 'app.asar.unpacked', 'extension');
+}
+
+function getBrowserExtensionUrl(browser = 'chrome') {
+  return browser === 'edge' ? 'edge://extensions/' : 'chrome://extensions/';
+}
+
+function getBrowserExecutableCandidates(browser = 'chrome') {
+  const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const localAppData = process.env.LOCALAPPDATA || '';
+  if (browser === 'edge') {
+    return [
+      path.join(programFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      path.join(programFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+      localAppData ? path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+    ].filter(Boolean);
+  }
+  return [
+    path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(programFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    localAppData ? path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+  ].filter(Boolean);
+}
+
+async function openBrowserExtensionsPage(browser = 'chrome') {
+  const targetUrl = getBrowserExtensionUrl(browser);
+  const browserPath = getBrowserExecutableCandidates(browser).find((candidate) => existsSync(candidate));
+  if (browserPath) {
+    const child = spawn(browserPath, [targetUrl], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+    child.unref();
+    return { opened: true, url: targetUrl, browserPath };
+  }
+  await shell.openExternal(targetUrl);
+  return { opened: true, url: targetUrl, browserPath: '' };
+}
+
+app.setName(getProductTitle());
+app.setPath('userData', path.join(app.getPath('appData'), getProductTitle()));
+
 const singleInstanceLock = app.requestSingleInstanceLock();
 
 if (!singleInstanceLock) {
@@ -127,12 +189,12 @@ function createEmptyDatabase() {
       defaultFolderId: 'default',
       ads: [],
       remoteAds: {
-        configUrl: '',
+        configUrl: defaultRemoteAdsUrl,
         cachedAds: [],
         lastFetchedAt: '',
       },
       update: {
-        configUrl: '',
+        configUrl: defaultUpdateConfigUrl,
         lastCheckedAt: '',
         lastVersion: '',
       },
@@ -209,20 +271,25 @@ function safeUpdateFileName(fileName, fallback = 'AI素材库-更新包.exe') {
   return name.toLowerCase().endsWith('.exe') ? name : `${name || fallback}.exe`;
 }
 
-function normalizeUpdateConfig(payload = {}) {
+function normalizeUpdateConfig(payload = {}, options = {}) {
+  const allowIncomplete = options.allowIncomplete === true;
   const version = String(payload.version || '').trim();
   const installerUrl = String(payload.installerUrl || payload.url || '').trim();
   if (!version) throw new Error('更新配置缺少版本号 version。');
-  if (!installerUrl) throw new Error('更新配置缺少安装包地址 installerUrl。');
-  const parsedUrl = new URL(installerUrl);
-  if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('安装包地址只支持 http 或 https。');
+  let parsedUrl = null;
+  if (installerUrl) {
+    parsedUrl = new URL(installerUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('安装包地址只支持 http 或 https。');
+  } else if (!allowIncomplete) {
+    throw new Error('更新配置缺少安装包地址 installerUrl。');
+  }
   return {
     version,
     title: String(payload.title || '发现新版本').trim(),
     notes: Array.isArray(payload.notes)
       ? payload.notes.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 20)
       : [],
-    installerUrl: parsedUrl.toString(),
+    installerUrl: parsedUrl ? parsedUrl.toString() : '',
     fileName: safeUpdateFileName(payload.fileName || path.basename(parsedUrl.pathname) || `AI素材库-${version}.exe`),
     sha256: String(payload.sha256 || '').trim().toLowerCase(),
     force: payload.force === true,
@@ -306,7 +373,11 @@ async function checkForUpdate(configUrl) {
   const parsedUrl = new URL(url);
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('update.json 地址只支持 http 或 https。');
   const payload = await fetchJsonWithTimeout(parsedUrl.toString());
-  const update = normalizeUpdateConfig(payload);
+  const signatureCheck = verifySignedConfig(payload);
+  if (!signatureCheck.ok) {
+    throw new Error(`更新配置签名无效：${signatureCheck.reason || '请确认 update.json 是由管理版生成的。'}`);
+  }
+  const update = normalizeUpdateConfig(payload, { allowIncomplete: true });
   const currentVersion = app.getVersion();
   const available = compareVersions(update.version, currentVersion) > 0;
   return {
@@ -2021,13 +2092,14 @@ async function saveEditedCopy(rootPath, sourceAsset, dataUrl, edits = {}) {
 
 async function createWindow() {
   Menu.setApplicationMenu(null);
+  app.setName(getProductTitle());
 
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1120,
     minHeight: 720,
-    title: 'AI 素材库',
+    title: getProductTitle(),
     backgroundColor: '#101214',
     autoHideMenuBar: true,
     frame: false,
@@ -2040,7 +2112,12 @@ async function createWindow() {
   });
 
   if (isDev) {
-    await mainWindow.loadURL('http://127.0.0.1:5173');
+    try {
+      await mainWindow.loadURL('http://127.0.0.1:5173');
+    } catch (loadError) {
+      console.warn('开发服务器加载失败，改用本地 dist 页面：', loadError?.message || loadError);
+      await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    }
   } else {
     await mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
@@ -2181,13 +2258,7 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-ipcMain.handle('library:chooseRoot', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: '选择素材库保存位置',
-    properties: ['openDirectory', 'createDirectory'],
-  });
-  if (result.canceled || !result.filePaths[0]) return null;
-  const rootPath = result.filePaths[0];
+async function openLibraryRoot(rootPath) {
   activeRootPath = rootPath;
   await ensureLibrary(rootPath);
   let database = await readDatabase(rootPath);
@@ -2198,6 +2269,44 @@ ipcMain.handle('library:chooseRoot', async () => {
   database = (await cleanupExpiredTrash(rootPath, database)).database;
   database = (await syncLibraryFilesToFolders(rootPath, database)).database;
   return { rootPath, database };
+}
+
+ipcMain.handle('library:createRoot', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '创建 Cyrus Ai 素材库',
+    buttonLabel: '创建素材库',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return openLibraryRoot(result.filePaths[0]);
+});
+
+ipcMain.handle('library:selectExistingRoot', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择已有 Cyrus Ai 素材库',
+    buttonLabel: '选择素材库',
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const rootPath = result.filePaths[0];
+  const dbPath = path.join(rootPath, 'database', 'library.json');
+  if (!existsSync(dbPath)) {
+    return {
+      error: 'missing-library',
+      rootPath,
+      message: '这个文件夹里没有找到 Cyrus Ai 素材库数据。请返回后选择“创建新素材库”，或重新选择已有素材库文件夹。',
+    };
+  }
+  return openLibraryRoot(rootPath);
+});
+
+ipcMain.handle('library:chooseRoot', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择素材库保存位置',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  return openLibraryRoot(result.filePaths[0]);
 });
 
 ipcMain.handle('library:load', async (_, rootPath) => {
@@ -2234,6 +2343,37 @@ ipcMain.handle('library:importPackage', async (_, rootPath) => importLibraryPack
 ipcMain.handle('updates:getAppVersion', async () => ({ version: app.getVersion(), isPackaged: app.isPackaged }));
 ipcMain.handle('updates:check', async (_, configUrl) => checkForUpdate(configUrl));
 ipcMain.handle('updates:download', async (_, update) => downloadUpdate(update));
+ipcMain.handle('updates:chooseInstaller', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择新版安装包',
+    filters: [
+      { name: 'Windows 安装包', extensions: ['exe'] },
+      { name: '所有文件', extensions: ['*'] },
+    ],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths?.[0]) return null;
+  const installerPath = result.filePaths[0];
+  const stats = await fs.stat(installerPath);
+  return {
+    path: installerPath,
+    fileName: path.basename(installerPath),
+    size: stats.size,
+    sha256: await hashFile(installerPath),
+  };
+});
+ipcMain.handle('updates:exportConfig', async (_, config, privateKeyBase64) => {
+  const normalized = normalizeUpdateConfig(config);
+  const signed = signConfigPayload(normalized, privateKeyBase64);
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: '导出带签名的 update.json',
+    defaultPath: path.join(app.getPath('desktop'), 'update.json'),
+    filters: [{ name: 'JSON 配置文件', extensions: ['json'] }],
+  });
+  if (result.canceled || !result.filePath) return null;
+  await fs.writeFile(result.filePath, `${JSON.stringify(signed, null, 2)}\n`, 'utf8');
+  return { path: result.filePath, version: signed.version };
+});
 ipcMain.handle('updates:install', async (_, payload) => installDownloadedUpdate(payload));
 
 ipcMain.handle('ai:testConnection', async (_, config) => {
@@ -2576,7 +2716,7 @@ ipcMain.handle('ads:chooseImage', async (_, rootPath) => {
   return { path: targetPath, name: path.basename(sourcePath) };
 });
 
-ipcMain.handle('ads:exportPackage', async (_, rootPath, ads) => {
+ipcMain.handle('ads:exportPackage', async (_, rootPath, ads, privateKeyBase64) => {
   if (!rootPath) throw new Error('请先选择素材库位置');
   await ensureLibrary(rootPath);
   const items = (Array.isArray(ads) ? ads : [])
@@ -2623,13 +2763,13 @@ ipcMain.handle('ads:exportPackage', async (_, rootPath, ads) => {
       enabled: ad.enabled !== false,
     });
   }
-  const config = {
+  const config = signConfigPayload({
     version: 1,
     updatedAt: new Date().toISOString(),
     ads: exportedAds,
-  };
+  }, privateKeyBase64);
   await fs.writeFile(path.join(packageDir, 'ads.json'), JSON.stringify(config, null, 2), 'utf8');
-  await fs.writeFile(path.join(packageDir, '使用说明.txt'), '把本文件夹里的 ads.json 和 ads 文件夹一起上传到 GitHub Pages 或云存储。软件广告配置地址填写上传后的 ads.json 网址。ads.json 里的 imageUrl 使用相对路径，和 ads 文件夹保持同级即可。', 'utf8');
+  await fs.writeFile(path.join(packageDir, '使用说明.txt'), '把本文件夹里的 ads.json 和 ads 文件夹一起上传到 GitHub Pages 或云存储。软件广告配置地址填写上传后的 ads.json 网址。ads.json 里的 imageUrl 使用相对路径，和 ads 文件夹保持同级即可。请不要手动改 ads.json 内容，否则签名会失效。', 'utf8');
   return { path: packageDir, count: exportedAds.length };
 });
 
@@ -2741,6 +2881,47 @@ ipcMain.handle('clipboard:readImageFile', async () => {
   const filePath = path.join(tempDir, `clipboard-${Date.now()}-${randomUUID().slice(0, 8)}.png`);
   await fs.writeFile(filePath, image.toPNG());
   return { path: filePath, width: size.width, height: size.height };
+});
+
+ipcMain.handle('extension:getInfo', async () => {
+  const folderPath = getExtensionFolderPath();
+  const manifestPath = path.join(folderPath, 'manifest.json');
+  let manifest = null;
+  try {
+    manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  } catch {}
+  return {
+    path: folderPath,
+    manifestPath,
+    exists: existsSync(manifestPath),
+    name: manifest?.name || 'Cyrus 素材采集插件',
+    version: manifest?.version || '',
+    githubUrl: 'https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/latest',
+    chromeExtensionsUrl: 'chrome://extensions/',
+    edgeExtensionsUrl: 'edge://extensions/',
+  };
+});
+
+ipcMain.handle('extension:prepareInstall', async (_, browser = 'chrome') => {
+  const folderPath = getExtensionFolderPath();
+  const manifestPath = path.join(folderPath, 'manifest.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error('没有找到插件文件夹，请确认当前软件安装完整。');
+  }
+  let manifest = null;
+  try {
+    manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  } catch {}
+  const openResult = await openBrowserExtensionsPage(browser === 'edge' ? 'edge' : 'chrome');
+  return {
+    path: folderPath,
+    manifestPath,
+    exists: true,
+    name: manifest?.name || 'Cyrus 素材采集插件',
+    version: manifest?.version || '',
+    browser: browser === 'edge' ? 'edge' : 'chrome',
+    ...openResult,
+  };
 });
 
 ipcMain.handle('shell:showItem', async (_, itemPath) => shell.showItemInFolder(itemPath));

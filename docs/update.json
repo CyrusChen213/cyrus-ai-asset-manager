@@ -1,19 +1,19 @@
 {
-  "version": "1.0.7",
+  "version": "1.0.8",
   "title": "发现新版本",
   "notes": [
-    "设置里新增主动检测新版本",
-    "优化设置页滚动和底部按钮显示",
-    "修复旧素材库默认更新地址读取"
+    "新增素材采集插件入口",
+    "新增加入Ai交流群页面",
+    "优化 RunningHub 指南与设置页显示"
   ],
-  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.7/Cyrus-Ai-Asset-Manager-User-v1.0.7.exe",
-  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.7.exe",
-  "sha256": "3174FDC598046A3443CE7F9BC48B3D16FAD561BDDA3282455CF2B36A2C753DE8",
+  "installerUrl": "https://github.com/CyrusChen213/cyrus-ai-asset-manager/releases/download/v1.0.8/Cyrus-Ai-Asset-Manager-User-v1.0.8.exe",
+  "fileName": "Cyrus-Ai-Asset-Manager-User-v1.0.8.exe",
+  "sha256": "554DDDAED91329D6C12319C7595DC1765E1C57FF180D7774E34B238BC7A39A1A",
   "force": false,
-  "size": 117586377,
+  "size": 117657452,
   "signature": {
     "keyId": "cyrus-config-v1",
     "algorithm": "ECDSA-P256-SHA256",
-    "value": "TR0QP_nLryqyEk6yXOQflwk5BVAoNE6SQZrJRprAJOeTrcDCh5AeXc3WBxJ-MkQb6BUbH93bFg2XwRzYPkTJjg"
+    "value": "B_yrvNvIHHuG9zxPjz6c27s_U6zQ99Bqha_ZzR8pnGHXUxlKNEC0GUVU49u3fMFSr_lI5r2sntLSkUsC078mRQ"
   }
 }
