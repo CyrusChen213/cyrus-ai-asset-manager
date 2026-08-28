@@ -1,10 +1,23 @@
 {
-  "version": 1,
-  "updatedAt": "",
-  "ads": [],
+  "version": 2,
+  "updatedAt": "2026-08-28T15:39:20.859Z",
+  "ads": [
+    {
+      "title": "66666.jpg",
+      "imageUrl": "ads/1787419393488_66666.jpg",
+      "linkUrl": "https://app-bc7556c629a74e7f9d20b08ff0f30945.apps.vibex.cn/?inviteCode=rh-v1316",
+      "enabled": true
+    },
+    {
+      "title": "1454.png",
+      "imageUrl": "ads/1787419458746_1454.png",
+      "linkUrl": "https://app-a50995299cea45379e5c304b6c05d2da.apps.vibex.cn/?inviteCode=rh-v1316",
+      "enabled": true
+    }
+  ],
   "signature": {
     "keyId": "cyrus-config-v1",
     "algorithm": "ECDSA-P256-SHA256",
-    "value": "JqQpn5CybGnQLMI2UlnLD13fm-5dPoV9Ok7DHOrTVLZclywQTDcfpYidVDzBUzuhQnFQ8gqkpsIKjJccD2WEMw"
+    "value": "6Ds5Rdp51dHObjfV90sQamVarMdOBaRyor7vI-qCRMwxbLvHK8f95fHy4vma0WSlUn1YHH_XWPDw2nAlYgKQAw"
   }
 }
